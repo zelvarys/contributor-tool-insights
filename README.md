@@ -41,7 +41,7 @@ curl http://localhost:3000/health
 
 ---
 
-### Phase 1 — Docker + Database
+### Phase 1 — Docker + Database ✅
 
 **Goal:** Postgres + Redis running locally, schema applied via migrations.
 
@@ -64,7 +64,7 @@ psql $DATABASE_URL -c "\dt"
 # → users, repositories, scans, tool_usage
 ```
 
-**Status:** NOT STARTED
+**Status:** COMPLETE
 
 ---
 
