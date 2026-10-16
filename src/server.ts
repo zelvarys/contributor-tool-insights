@@ -16,7 +16,7 @@ async function start() {
 
   const server = app.listen(env.PORT, () => {
     logger.info(
-      `🚀 contributor-tool-insights listening on http://localhost:${env.PORT} (${env.NODE_ENV})`,
+      `CTI listening on http://localhost:${env.PORT} (${env.NODE_ENV})`,
     );
   });
 
