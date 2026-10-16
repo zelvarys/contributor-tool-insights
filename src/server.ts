@@ -1,34 +1,50 @@
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
+import { pingDb, closeDb } from './config/database.js';
+import { closeRedis } from './config/redis.js';
 
 const app = createApp();
 
-const server = app.listen(env.PORT, () => {
-  logger.info(
-    `Listening on http://localhost:${env.PORT} (${env.NODE_ENV})`,
-  );
-});
+async function start() {
+  try {
+    await pingDb();
+  } catch (err) {
+    logger.error('Cannot reach Postgres at boot', err);
+    process.exit(1);
+  }
 
-// Graceful shutdown so tsx watch restarts cleanly
-function shutdown(signal: string): void {
-  logger.info(`${signal} received — shutting down`);
-  server.close(() => {
-    logger.info('HTTP server closed');
-    process.exit(0);
+  const server = app.listen(env.PORT, () => {
+    logger.info(
+      `🚀 contributor-tool-insights listening on http://localhost:${env.PORT} (${env.NODE_ENV})`,
+    );
   });
-  // Force-exit if connections hang
-  setTimeout(() => process.exit(1), 10_000).unref();
+
+  async function shutdown(signal: string) {
+    logger.info(`${signal} received — shutting down`);
+    server.close(async () => {
+      try {
+        await closeDb();
+        await closeRedis();
+      } catch (err) {
+        logger.error('Error during shutdown', err);
+      }
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10_000).unref();
+  }
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-
 process.on('unhandledRejection', (reason) => {
-  logger.error({ reason }, 'Unhandled promise rejection');
+  logger.error('Unhandled promise rejection', reason);
 });
 
 process.on('uncaughtException', (err) => {
-  logger.fatal({ err }, 'Uncaught exception — exiting');
+  logger.error('Uncaught exception — exiting', err);
   process.exit(1);
 });
+
+start();
