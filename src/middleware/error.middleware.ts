@@ -1,5 +1,4 @@
 import type { NextFunction, Request, Response } from 'express';
-import { ZodError } from 'zod';
 import { AppError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { isProd } from '../config/env.js';
@@ -10,22 +9,9 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
-  // Zod validation errors → 400 with field details
-  if (err instanceof ZodError) {
-    res.status(400).json({
-      error: {
-        code: 'VALIDATION_ERROR',
-        message: 'Invalid request',
-        details: err.flatten().fieldErrors,
-      },
-    });
-    return;
-  }
-
-  // Our own AppError
   if (err instanceof AppError) {
     if (err.statusCode >= 500) {
-      logger.error({ err }, err.message);
+      logger.error(err.message, err.details);
     }
     res.status(err.statusCode).json({
       error: {
@@ -37,8 +23,7 @@ export function errorHandler(
     return;
   }
 
-  // Unknown error
-  logger.error({ err }, 'Unhandled error');
+  logger.error('Unhandled error', err);
   res.status(500).json({
     error: {
       code: 'INTERNAL_ERROR',
