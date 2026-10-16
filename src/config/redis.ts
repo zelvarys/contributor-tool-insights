@@ -1,15 +1,15 @@
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { env } from './env.js';
 import { logger } from '../utils/logger.js';
 
 export const redis = new Redis(env.REDIS_URL, {
-  maxRetriesPerRequest: null,  // important for BullMQ in later phases
+  maxRetriesPerRequest: null,
   lazyConnect: false,
 });
 
 redis.on('connect', () => logger.debug('Redis connecting…'));
 redis.on('ready', () => logger.debug('Redis ready'));
-redis.on('error', (err) => logger.error('Redis error', err.message));
+redis.on('error', (err: Error) => logger.error('Redis error', err.message));
 
 export async function closeRedis(): Promise<void> {
   await redis.quit();
