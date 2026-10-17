@@ -68,20 +68,21 @@ psql $DATABASE_URL -c "\dt"
 
 ---
 
-### Phase 2 — GitHub OAuth
+### Phase 2 — GitHub OAuth ✅
 
 **Goal:** A real user can log in via GitHub and receive a JWT cookie.
 
 **Files created:**
 
 ```
+src/utils/jwt.ts
+src/utils/crypto.ts
 src/integrations/github/github.oauth.ts
 src/integrations/github/github.client.ts
 src/integrations/github/github.types.ts
-src/modules/auth/auth.controller.ts
 src/modules/auth/auth.service.ts
+src/modules/auth/auth.controller.ts
 src/modules/auth/auth.routes.ts
-src/modules/auth/auth.schema.ts
 src/middleware/auth.middleware.ts
 ```
 
@@ -95,7 +96,7 @@ src/middleware/auth.middleware.ts
 5. psql: SELECT * FROM users; → row exists
 ```
 
-**Status:** NOT STARTED
+**Status:** COMPLETE
 
 ---
 

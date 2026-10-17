@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
+import { authRoutes } from './modules/auth/auth.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -20,7 +21,6 @@ export function createApp(): Express {
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
 
-  // Simple request log — replaces pino-http
   app.use((req, _res, next) => {
     logger.debug(`${req.method} ${req.url}`);
     next();
@@ -33,6 +33,8 @@ export function createApp(): Express {
       time: new Date().toISOString(),
     });
   });
+
+  app.use('/auth', authRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
