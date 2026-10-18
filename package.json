@@ -8,13 +8,15 @@
     "node": ">=20"
   },
   "scripts": {
-  "dev": "tsx watch src/server.ts",
-  "build": "tsc",
-  "start": "node dist/server.js",
-  "migrate": "node scripts/migrate.js",
-  "typecheck": "tsc --noEmit"
+    "dev": "tsx watch src/server.ts",
+    "worker": "tsx watch src/modules/scans/scan.worker.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "migrate": "node scripts/migrate.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "bullmq": "^6.3.16",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
