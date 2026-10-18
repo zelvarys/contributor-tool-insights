@@ -6,6 +6,7 @@ import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
+import { repositoryRoutes } from './modules/repositories/repository.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -35,6 +36,7 @@ export function createApp(): Express {
   });
 
   app.use('/auth', authRoutes);
+  app.use('/repos', repositoryRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
