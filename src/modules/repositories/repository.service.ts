@@ -2,12 +2,11 @@ import { pool } from '../../config/database.js';
 import { getAccessTokenForUser } from '../auth/auth.service.js';
 import {
   listAuthenticatedUserRepos,
-  listContributedRepos,
   getRepo,
   getContributorCount,
   type GitHubRepo,
 } from '../../integrations/github/github.client.js';
-import { AppError, badRequest, notFound, unauthorized } from '../../utils/errors.js';
+import { AppError, badRequest, notFound } from '../../utils/errors.js';
 
 export type TrackedRepository = {
   id: string;
@@ -51,43 +50,29 @@ function toTracked(row: {
   };
 }
 
-/**
- * Fetch the GitHub login for a given internal user id.
- * We need this to scope the `author:<login>` commit search.
- */
-async function getUsernameForUserId(userId: string): Promise<string> {
+async function getUsernameForUser(userId: string): Promise<string> {
   const { rows } = await pool.query<{ username: string }>(
     'SELECT username FROM users WHERE id = $1',
     [userId],
   );
-  const row = rows[0];
-  if (!row) throw unauthorized('User not found');
-  return row.username;
+  const username = rows[0]?.username;
+  if (!username) {
+    throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+  return username;
 }
 
 export async function listUserGitHubRepos(userId: string): Promise<GitHubRepo[]> {
   const token = await getAccessTokenForUser(userId);
   if (!token) {
-    throw new AppError('GitHub token unavailable — please re-authenticate', 401, 'UNAUTHORIZED');
+    throw new AppError(
+      'GitHub token unavailable — please re-authenticate',
+      401,
+      'UNAUTHORIZED',
+    );
   }
-  const username = await getUsernameForUserId(userId);
-
-  // 1. Base list: owned + collaborator repos
-  const owned = await listAuthenticatedUserRepos(token);
-
-  // 2. Contributed repos via commit search
-  const contributed = await listContributedRepos(token, username);
-
-  // 3. Merge, dedupe by id, sort by full_name for stable UX
-  const merged = new Map<number, GitHubRepo>();
-  for (const repo of owned) merged.set(repo.id, repo);
-  for (const repo of contributed) {
-    if (!merged.has(repo.id)) merged.set(repo.id, repo);
-  }
-
-  return Array.from(merged.values()).sort((a, b) =>
-    a.full_name.localeCompare(b.full_name),
-  );
+  const userLogin = await getUsernameForUser(userId);
+  return listAuthenticatedUserRepos(token, userLogin);
 }
 
 export async function addTrackedRepository(
@@ -96,32 +81,28 @@ export async function addTrackedRepository(
 ): Promise<TrackedRepository> {
   const token = await getAccessTokenForUser(userId);
   if (!token) {
-    throw new AppError('GitHub token unavailable — please re-authenticate', 401, 'UNAUTHORIZED');
+    throw new AppError(
+      'GitHub token unavailable — please re-authenticate',
+      401,
+      'UNAUTHORIZED',
+    );
   }
+  const userLogin = await getUsernameForUser(userId);
 
-  // Locate the repo among owned/collaborator OR contributed lists.
+  // Find the repo in the user's accessible list (up to 3 pages).
   let target: GitHubRepo | null = null;
-
   for (let page = 1; page <= 3; page += 1) {
-    const repos = await listAuthenticatedUserRepos(token, page);
+    const repos = await listAuthenticatedUserRepos(token, userLogin, page);
     target = repos.find((r) => r.id === githubId) ?? null;
     if (target) break;
-    if (repos.length < 100) break;
-  }
-
-  if (!target) {
-    // Fall back to the contributed list
-    const username = await getUsernameForUserId(userId);
-    const contributed = await listContributedRepos(token, username);
-    target = contributed.find((r) => r.id === githubId) ?? null;
+    if (repos.length < 100) break; // last page
   }
 
   if (!target) {
     throw badRequest('Repository not found in your GitHub account');
   }
 
-  // Verify access (catches stale tokens from orgs the user left).
-  // Throws 404/403 from GitHub if access is gone.
+  // Confirm token still has access (defends against stale tokens).
   await getRepo(token, target.owner.login, target.name);
 
   // Already tracked?
@@ -133,7 +114,6 @@ export async function addTrackedRepository(
     throw new AppError('Repository is already tracked', 409, 'CONFLICT');
   }
 
-  // Contributor count (best-effort)
   const contributorCount = await getContributorCount(
     token,
     target.owner.login,

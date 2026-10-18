@@ -53,15 +53,46 @@ export type GitHubRepo = {
   forks_count: number;
 };
 
+/**
+ * Returns repos you own, are a collaborator on, or have contributed to
+ * within an organisation you belong to.
+ *
+ * - Owned repos: always kept.
+ * - Collaborator repos: always kept.
+ * - Org repos: kept only if `userLogin` has at least one commit on the
+ *   default branch. One request per org repo; skipped cheaply on error.
+ */
 export async function listAuthenticatedUserRepos(
   token: string,
+  userLogin: string,
   page = 1,
   perPage = 100,
 ): Promise<GitHubRepo[]> {
-  return ghFetch<GitHubRepo[]>(
-    `/user/repos?per_page=${perPage}&page=${page}&sort=updated&affiliation=owner,collaborator`,
+  const repos = await ghFetch<GitHubRepo[]>(
+    `/user/repos?per_page=${perPage}&page=${page}&sort=updated&affiliation=owner,collaborator,organization_member`,
     token,
   );
+
+  const filtered: GitHubRepo[] = [];
+  for (const repo of repos) {
+    if (repo.owner.login === userLogin) {
+      filtered.push(repo);
+      continue;
+    }
+
+    // Org/collaborator repo — only keep if userLogin has a commit on it.
+    try {
+      const commits = await ghFetch<unknown[]>(
+        `/repos/${repo.owner.login}/${repo.name}/commits?author=${userLogin}&per_page=1`,
+        token,
+      );
+      if (commits.length > 0) filtered.push(repo);
+    } catch {
+      // Empty repo (409), no access (404), rate-limited (403) — skip
+    }
+  }
+
+  return filtered;
 }
 
 export async function getRepo(
@@ -101,71 +132,4 @@ export async function getContributorCount(
   } catch {
     return 0;
   }
-}
-
-// ─── Phase 3 (extended): contributed repos via commit search ────────────
-
-type SearchCommitItem = {
-  repository: {
-    id: number;
-    name: string;
-    full_name: string;
-    owner: { login: string };
-    private: boolean;
-    default_branch: string;
-    stargazers_count: number;
-    forks_count: number;
-  };
-};
-
-type SearchCommitsResponse = {
-  total_count: number;
-  items: SearchCommitItem[];
-};
-
-/**
- * Uses GitHub's commit search to find repos the user has committed to.
- * Returns deduplicated GitHubRepo objects. Caps at 2 pages of 100 commits.
- * Best-effort: returns [] on failure (search can be rate-limited separately).
- */
-export async function listContributedRepos(
-  token: string,
-  username: string,
-  maxPages = 2,
-): Promise<GitHubRepo[]> {
-  const seen = new Map<number, GitHubRepo>();
-  const q = encodeURIComponent(`author:${username}`);
-
-  try {
-    for (let page = 1; page <= maxPages; page += 1) {
-      const data = await ghFetch<SearchCommitsResponse>(
-        `/search/commits?q=${q}&per_page=100&page=${page}`,
-        token,
-      );
-
-      for (const item of data.items) {
-        const r = item.repository;
-        if (!seen.has(r.id)) {
-          seen.set(r.id, {
-            id: r.id,
-            name: r.name,
-            full_name: r.full_name,
-            owner: { login: r.owner.login },
-            private: r.private,
-            default_branch: r.default_branch,
-            stargazers_count: r.stargazers_count,
-            forks_count: r.forks_count,
-          });
-        }
-      }
-
-      // Stop if we've consumed everything
-      if (data.items.length < 100) break;
-      if (page * 100 >= data.total_count) break;
-    }
-  } catch {
-    // Search rate-limit or failure: fall back to what we already have
-  }
-
-  return Array.from(seen.values());
 }
