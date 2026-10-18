@@ -2,11 +2,12 @@ import { pool } from '../../config/database.js';
 import { getAccessTokenForUser } from '../auth/auth.service.js';
 import {
   listAuthenticatedUserRepos,
+  listContributedRepos,
   getRepo,
   getContributorCount,
   type GitHubRepo,
 } from '../../integrations/github/github.client.js';
-import { AppError, badRequest, notFound } from '../../utils/errors.js';
+import { AppError, badRequest, notFound, unauthorized } from '../../utils/errors.js';
 
 export type TrackedRepository = {
   id: string;
@@ -50,12 +51,43 @@ function toTracked(row: {
   };
 }
 
+/**
+ * Fetch the GitHub login for a given internal user id.
+ * We need this to scope the `author:<login>` commit search.
+ */
+async function getUsernameForUserId(userId: string): Promise<string> {
+  const { rows } = await pool.query<{ username: string }>(
+    'SELECT username FROM users WHERE id = $1',
+    [userId],
+  );
+  const row = rows[0];
+  if (!row) throw unauthorized('User not found');
+  return row.username;
+}
+
 export async function listUserGitHubRepos(userId: string): Promise<GitHubRepo[]> {
   const token = await getAccessTokenForUser(userId);
   if (!token) {
     throw new AppError('GitHub token unavailable — please re-authenticate', 401, 'UNAUTHORIZED');
   }
-  return listAuthenticatedUserRepos(token);
+  const username = await getUsernameForUserId(userId);
+
+  // 1. Base list: owned + collaborator repos
+  const owned = await listAuthenticatedUserRepos(token);
+
+  // 2. Contributed repos via commit search
+  const contributed = await listContributedRepos(token, username);
+
+  // 3. Merge, dedupe by id, sort by full_name for stable UX
+  const merged = new Map<number, GitHubRepo>();
+  for (const repo of owned) merged.set(repo.id, repo);
+  for (const repo of contributed) {
+    if (!merged.has(repo.id)) merged.set(repo.id, repo);
+  }
+
+  return Array.from(merged.values()).sort((a, b) =>
+    a.full_name.localeCompare(b.full_name),
+  );
 }
 
 export async function addTrackedRepository(
@@ -67,23 +99,29 @@ export async function addTrackedRepository(
     throw new AppError('GitHub token unavailable — please re-authenticate', 401, 'UNAUTHORIZED');
   }
 
-  // Verify the user actually has access to this repo and gather metadata.
-  // We need owner/name, so first find it in the user's repo list (paged, up to 3 pages).
+  // Locate the repo among owned/collaborator OR contributed lists.
   let target: GitHubRepo | null = null;
+
   for (let page = 1; page <= 3; page += 1) {
     const repos = await listAuthenticatedUserRepos(token, page);
     target = repos.find((r) => r.id === githubId) ?? null;
     if (target) break;
-    if (repos.length < 100) break; // last page
+    if (repos.length < 100) break;
+  }
+
+  if (!target) {
+    // Fall back to the contributed list
+    const username = await getUsernameForUserId(userId);
+    const contributed = await listContributedRepos(token, username);
+    target = contributed.find((r) => r.id === githubId) ?? null;
   }
 
   if (!target) {
     throw badRequest('Repository not found in your GitHub account');
   }
 
-  // Verify the token still has access to this repo (catches stale tokens
-  // from orgs the user left without revoking access). Throws 404/403
-  // from GitHub if access is gone.
+  // Verify access (catches stale tokens from orgs the user left).
+  // Throws 404/403 from GitHub if access is gone.
   await getRepo(token, target.owner.login, target.name);
 
   // Already tracked?

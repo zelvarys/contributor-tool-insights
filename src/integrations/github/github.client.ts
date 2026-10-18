@@ -36,7 +36,6 @@ export async function getPrimaryEmail(token: string): Promise<string | null> {
     const primary = emails.find((e) => e.primary && e.verified);
     return primary?.email ?? emails[0]?.email ?? null;
   } catch {
-    // Scope might not include user:email, or no emails visible — non-fatal
     return null;
   }
 }
@@ -79,7 +78,6 @@ export async function getContributorCount(
   repo: string,
 ): Promise<number> {
   try {
-    // Fetch first page only; count via Link header "last" if present, else length
     const res = await fetch(
       `https://api.github.com/repos/${owner}/${repo}/contributors?per_page=1&anon=false`,
       {
@@ -103,4 +101,71 @@ export async function getContributorCount(
   } catch {
     return 0;
   }
+}
+
+// ─── Phase 3 (extended): contributed repos via commit search ────────────
+
+type SearchCommitItem = {
+  repository: {
+    id: number;
+    name: string;
+    full_name: string;
+    owner: { login: string };
+    private: boolean;
+    default_branch: string;
+    stargazers_count: number;
+    forks_count: number;
+  };
+};
+
+type SearchCommitsResponse = {
+  total_count: number;
+  items: SearchCommitItem[];
+};
+
+/**
+ * Uses GitHub's commit search to find repos the user has committed to.
+ * Returns deduplicated GitHubRepo objects. Caps at 2 pages of 100 commits.
+ * Best-effort: returns [] on failure (search can be rate-limited separately).
+ */
+export async function listContributedRepos(
+  token: string,
+  username: string,
+  maxPages = 2,
+): Promise<GitHubRepo[]> {
+  const seen = new Map<number, GitHubRepo>();
+  const q = encodeURIComponent(`author:${username}`);
+
+  try {
+    for (let page = 1; page <= maxPages; page += 1) {
+      const data = await ghFetch<SearchCommitsResponse>(
+        `/search/commits?q=${q}&per_page=100&page=${page}`,
+        token,
+      );
+
+      for (const item of data.items) {
+        const r = item.repository;
+        if (!seen.has(r.id)) {
+          seen.set(r.id, {
+            id: r.id,
+            name: r.name,
+            full_name: r.full_name,
+            owner: { login: r.owner.login },
+            private: r.private,
+            default_branch: r.default_branch,
+            stargazers_count: r.stargazers_count,
+            forks_count: r.forks_count,
+          });
+        }
+      }
+
+      // Stop if we've consumed everything
+      if (data.items.length < 100) break;
+      if (page * 100 >= data.total_count) break;
+    }
+  } catch {
+    // Search rate-limit or failure: fall back to what we already have
+  }
+
+  return Array.from(seen.values());
 }
