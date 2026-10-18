@@ -60,7 +60,7 @@ export async function listAuthenticatedUserRepos(
   perPage = 100,
 ): Promise<GitHubRepo[]> {
   return ghFetch<GitHubRepo[]>(
-    `/user/repos?per_page=${perPage}&page=${page}&sort=updated&affiliation=owner,collaborator,organization_member`,
+    `/user/repos?per_page=${perPage}&page=${page}&sort=updated&affiliation=owner,collaborator`,
     token,
   );
 }
