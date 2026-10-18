@@ -100,7 +100,7 @@ src/middleware/auth.middleware.ts
 
 ---
 
-### Phase 3 — Repository Module
+### Phase 3 — Repository Module ✅
 
 **Goal:** Authenticated user can list their GitHub repos and add one to tracking.
 
@@ -122,7 +122,7 @@ GET  /repos              → list of tracked repos
 GET  /repos/:id          → detail of one repo
 ```
 
-**Status:** NOT STARTED
+**Status:** COMPLETE
 
 ---
 
