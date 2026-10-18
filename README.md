@@ -126,7 +126,7 @@ GET  /repos/:id          → detail of one repo
 
 ---
 
-### Phase 4 — Scan Queue (No Detectors Yet)
+### Phase 4 — Scan Queue (No Detectors Yet) ✅
 
 **Goal:** `POST /repos/:id/scan` enqueues a BullMQ job; a worker picks it up and writes a `scans` row with `status='complete'`.
 
@@ -154,7 +154,7 @@ psql $DATABASE_URL -c "SELECT status FROM scans ORDER BY created_at DESC LIMIT 1
 # → complete
 ```
 
-**Status:** NOT STARTED
+**Status:** COMPLETE
 
 ---
 
