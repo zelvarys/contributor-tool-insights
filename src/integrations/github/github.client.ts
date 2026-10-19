@@ -61,6 +61,9 @@ export type GitHubRepo = {
  * - Collaborator repos: always kept.
  * - Org repos: kept only if `userLogin` has at least one commit on the
  *   default branch. One request per org repo; skipped cheaply on error.
+ *
+ * NOTE (Phase 6): replace the per-repo commit check with a single GraphQL
+ * contributionsCollection.commitContributionsByRepository query.
  */
 export async function listAuthenticatedUserRepos(
   token: string,
@@ -80,7 +83,6 @@ export async function listAuthenticatedUserRepos(
       continue;
     }
 
-    // Org/collaborator repo — only keep if userLogin has a commit on it.
     try {
       const commits = await ghFetch<unknown[]>(
         `/repos/${repo.owner.login}/${repo.name}/commits?author=${userLogin}&per_page=1`,
@@ -131,5 +133,154 @@ export async function getContributorCount(
     return Array.isArray(data) ? data.length : 0;
   } catch {
     return 0;
+  }
+}
+
+// ─── Phase 5: scan data ─────────────────────────────────────────────────
+
+export type GitHubCommitListItem = {
+  sha: string;
+  commit: {
+    message: string;
+    author: {
+      name: string;
+      email: string;
+      date: string;
+    } | null;
+  };
+  author: { login: string } | null;
+};
+
+export type GitHubCommitDetail = {
+  sha: string;
+  files?: Array<{
+    filename: string;
+    status: string;
+    additions: number;
+    deletions: number;
+    changes: number;
+  }>;
+};
+
+export type GitHubContributor = {
+  login: string;
+  id: number;
+  contributions: number;
+  avatar_url: string;
+};
+
+export type GitHubContentEntry = {
+  type: 'file' | 'dir' | 'symlink' | 'submodule';
+  name: string;
+  path: string;
+  sha: string;
+  size?: number;
+};
+
+/**
+ * Fetch the most recent commits on the default branch.
+ * `maxPages` × 100 commits max. For MVP, 3 pages = 300 commits is plenty.
+ */
+export async function fetchRecentCommits(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string,
+  maxPages = 3,
+): Promise<GitHubCommitListItem[]> {
+  const all: GitHubCommitListItem[] = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const batch = await ghFetch<GitHubCommitListItem[]>(
+      `/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=100&page=${page}`,
+      token,
+    );
+    all.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return all;
+}
+
+/**
+ * Fetch file-level details for a commit (additions, filenames).
+ * Expensive: one request per commit. Caller should cap the number.
+ */
+export async function fetchCommitDetail(
+  token: string,
+  owner: string,
+  repo: string,
+  sha: string,
+): Promise<GitHubCommitDetail> {
+  return ghFetch<GitHubCommitDetail>(`/repos/${owner}/${repo}/commits/${sha}`, token);
+}
+
+/**
+ * Fetch contributors sorted by contribution count.
+ * Pages up to `maxPages` × 100.
+ */
+export async function fetchContributors(
+  token: string,
+  owner: string,
+  repo: string,
+  maxPages = 2,
+): Promise<GitHubContributor[]> {
+  const all: GitHubContributor[] = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const batch = await ghFetch<GitHubContributor[]>(
+      `/repos/${owner}/${repo}/contributors?per_page=100&page=${page}&anon=false`,
+      token,
+    );
+    all.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return all;
+}
+
+/**
+ * List files at the repo root (or any path) on a given ref.
+ * Returns [] on 404 (empty repo / missing path).
+ */
+export async function listContents(
+  token: string,
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string,
+): Promise<GitHubContentEntry[]> {
+  try {
+    const data = await ghFetch<GitHubContentEntry[] | GitHubContentEntry>(
+      `/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
+      token,
+    );
+    return Array.isArray(data) ? data : [data];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Read a single file's text content at a given ref.
+ * Returns null on 404 or if the entry is not a file.
+ */
+export async function readFileText(
+  token: string,
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string,
+): Promise<string | null> {
+  try {
+    const data = await ghFetch<
+      | { type: 'file'; content: string; encoding: string }
+      | GitHubContentEntry[]
+    >(
+      `/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
+      token,
+    );
+    if (Array.isArray(data)) return null;
+    if (data.type !== 'file') return null;
+    if (data.encoding !== 'base64') return null;
+    return Buffer.from(data.content, 'base64').toString('utf8');
+  } catch {
+    return null;
   }
 }

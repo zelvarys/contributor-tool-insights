@@ -158,7 +158,7 @@ psql $DATABASE_URL -c "SELECT status FROM scans ORDER BY created_at DESC LIMIT 1
 
 ---
 
-### Phase 5 — GitHub Data Fetching
+### Phase 5 — GitHub Data Fetching ✅
 
 **Goal:** The worker fetches real commit history + contributors + config files for a repo and stores them (temporarily, in Redis) so detectors can use them.
 
@@ -177,7 +177,7 @@ redis-cli KEYS "scan:context:*"
 # → shows cached commit history for the repo
 ```
 
-**Status:** NOT STARTED
+**Status:** COMPLETE
 
 ---
 

@@ -2,7 +2,10 @@ import { pool } from '../../config/database.js';
 import { encryptToken, decryptToken } from '../../utils/crypto.js';
 import { signJwt, parseExpiresIn } from '../../utils/jwt.js';
 import { env } from '../../config/env.js';
-import { getAuthenticatedUser, getPrimaryEmail } from '../../integrations/github/github.client.js';
+import {
+  getAuthenticatedUser,
+  getPrimaryEmail,
+} from '../../integrations/github/github.client.js';
 import { logger } from '../../utils/logger.js';
 
 export type AuthUser = {
@@ -71,5 +74,13 @@ export async function getAccessTokenForUser(userId: string): Promise<string | nu
   );
   const row = rows[0];
   if (!row) return null;
-  return decryptToken(row.access_token);
+  if (!row.access_token || row.access_token.trim() === '') return null;
+
+  try {
+    return decryptToken(row.access_token);
+  } catch {
+    // Corrupt or truncated ciphertext — treat as no token
+    logger.warn(`Token decrypt failed for user ${userId} — treating as missing`);
+    return null;
+  }
 }
