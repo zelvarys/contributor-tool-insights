@@ -181,7 +181,7 @@ redis-cli KEYS "scan:context:*"
 
 ---
 
-### Phase 6 — First Detector (Jest)
+### Phase 6 — First Detector (Jest) ✅
 
 **Goal:** Jest detector runs during a scan and writes a `tool_usage` row.
 
@@ -207,7 +207,7 @@ psql $DATABASE_URL -c "SELECT tool_name, detected, adoption_rate FROM tool_usage
 # → jest | true | 62.50
 ```
 
-**Status:** NOT STARTED
+**Status:** COMPLETE
 
 ---
 
