@@ -39,9 +39,15 @@ const CONFIG_FILE_CANDIDATES = [
   'eslint.config.js',
   'eslint.config.mjs',
   'eslint.config.cjs',
+
   '.prettierrc',
   '.prettierrc.json',
   '.prettierrc.js',
+  '.prettierrc.cjs',
+  '.prettierrc.yml',
+  '.prettierrc.yaml',
+  'prettier.config.js',
+  'prettier.config.cjs',
 
   'jest.config.js',
   'jest.config.ts',
@@ -55,16 +61,23 @@ const CONFIG_FILE_CANDIDATES = [
   'requirements.txt',
   'pytest.ini',
   'tox.ini',
+  'ruff.toml',
+  '.ruff.toml',
 
   'go.mod',
   'go.sum',
+  '.golangci.yml',
+  '.golangci.yaml',
+  '.golangci.toml',
+  '.golangci.json',
+
+  'composer.json',
+  'composer.lock',
+  'phpunit.xml',
+  'phpunit.xml.dist',
 
   'Gemfile',
   '.rubocop.yml',
-
-  'composer.json',
-  'phpunit.xml',
-  'phpunit.xml.dist',
 
   'mkdocs.yml',
   'docusaurus.config.js',
@@ -73,8 +86,13 @@ const CONFIG_FILE_CANDIDATES = [
 
 const CONFIG_SUBDIR_CANDIDATES = [
   { path: '.github/dependabot.yml' },
+  { path: '.github/dependabot.yaml' },
   { path: '.github/renovate.json' },
+  { path: '.github/renovate.json5' },
   { path: 'renovate.json' },
+  { path: 'renovate.json5' },
+  { path: '.renovaterc' },
+  { path: '.renovaterc.json' },
   { path: '.pre-commit-config.yaml' },
   { path: '.coveralls.yml' },
   { path: 'codecov.yml' },
@@ -163,7 +181,6 @@ async function buildScanContext(
     .filter((e) => e.type === 'file')
     .map((e) => `.github/workflows/${e.name}`);
 
-  // Read workflow contents so detectors can inspect them
   for (const wf of workflowFiles) {
     if (wf in configFiles) continue;
     const content = await readFileText(token, owner, name, wf, defaultBranch);
@@ -207,11 +224,9 @@ async function persistToolUsage(
 ): Promise<void> {
   if (results.length === 0) return;
 
-  // Wipe any stale rows for this scan (defensive; fresh scan → no rows)
   await pool.query('DELETE FROM tool_usage WHERE scan_id = $1', [scanId]);
 
   for (const r of results) {
-    // Repo-level row (contributor null)
     await pool.query(
       `INSERT INTO tool_usage
          (scan_id, repo_id, tool_name, category, detected, adoption_rate,
@@ -228,7 +243,6 @@ async function persistToolUsage(
       ],
     );
 
-    // Per-contributor rows (only when the detector reported them)
     if (r.perContributor) {
       for (const [login, used] of Object.entries(r.perContributor)) {
         await pool.query(
