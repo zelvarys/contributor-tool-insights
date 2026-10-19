@@ -89,23 +89,20 @@ export async function addTrackedRepository(
   }
   const userLogin = await getUsernameForUser(userId);
 
-  // Find the repo in the user's accessible list (up to 3 pages).
   let target: GitHubRepo | null = null;
   for (let page = 1; page <= 3; page += 1) {
     const repos = await listAuthenticatedUserRepos(token, userLogin, page);
     target = repos.find((r) => r.id === githubId) ?? null;
     if (target) break;
-    if (repos.length < 100) break; // last page
+    if (repos.length < 100) break;
   }
 
   if (!target) {
     throw badRequest('Repository not found in your GitHub account');
   }
 
-  // Confirm token still has access (defends against stale tokens).
   await getRepo(token, target.owner.login, target.name);
 
-  // Already tracked?
   const existing = await pool.query<{ id: string }>(
     'SELECT id FROM repositories WHERE github_id = $1',
     [githubId],

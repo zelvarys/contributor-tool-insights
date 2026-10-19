@@ -1,6 +1,7 @@
 import type { GitHubUser, GitHubEmail } from './github.types.js';
 
 const API = 'https://api.github.com';
+const GRAPHQL = 'https://api.github.com/graphql';
 
 async function ghFetch<T>(
   path: string,
@@ -22,6 +23,33 @@ async function ghFetch<T>(
     throw new Error(`GitHub API ${res.status} on ${path}: ${body.slice(0, 200)}`);
   }
   return (await res.json()) as T;
+}
+
+async function ghGraphql<T>(
+  query: string,
+  variables: Record<string, unknown>,
+  token: string,
+): Promise<T> {
+  const res = await fetch(GRAPHQL, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'contributor-tool-insights',
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GitHub GraphQL ${res.status}: ${body.slice(0, 200)}`);
+  }
+  const json = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
+  if (json.errors && json.errors.length > 0) {
+    throw new Error(`GitHub GraphQL error: ${json.errors[0]!.message}`);
+  }
+  if (!json.data) throw new Error('GitHub GraphQL returned no data');
+  return json.data;
 }
 
 // ─── Phase 2: auth ──────────────────────────────────────────────────────
@@ -53,17 +81,67 @@ export type GitHubRepo = {
   forks_count: number;
 };
 
+type ContributedRepoNode = {
+  repository: {
+    nameWithOwner: string; // "owner/name"
+  };
+};
+
+type ContributionsQueryResult = {
+  user: {
+    contributionsCollection: {
+      commitContributionsByRepository: ContributedRepoNode[];
+    } | null;
+  } | null;
+};
+
+const CONTRIBUTED_REPOS_QUERY = `
+  query ContributedRepos($login: String!) {
+    user(login: $login) {
+      contributionsCollection {
+        commitContributionsByRepository(maxRepositories: 100) {
+          repository {
+            nameWithOwner
+          }
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * Fetch the set of "owner/name" strings the user has committed to in the
+ * last year, in one GraphQL round-trip.
+ */
+async function fetchContributedRepoSet(
+  token: string,
+  userLogin: string,
+): Promise<Set<string>> {
+  try {
+    const data = await ghGraphql<ContributionsQueryResult>(
+      CONTRIBUTED_REPOS_QUERY,
+      { login: userLogin },
+      token,
+    );
+    const nodes = data.user?.contributionsCollection?.commitContributionsByRepository ?? [];
+    return new Set(nodes.map((n) => n.repository.nameWithOwner));
+  } catch {
+    // GraphQL may fail on brand-new accounts with no contribution data.
+    // Fall back to an empty set — the caller still shows owned + collaborator repos.
+    return new Set();
+  }
+}
+
 /**
  * Returns repos you own, are a collaborator on, or have contributed to
  * within an organisation you belong to.
  *
  * - Owned repos: always kept.
  * - Collaborator repos: always kept.
- * - Org repos: kept only if `userLogin` has at least one commit on the
- *   default branch. One request per org repo; skipped cheaply on error.
+ * - Org repos: kept only if they appear in the user's
+ *   commitContributionsByRepository set (single GraphQL query).
  *
- * NOTE (Phase 6): replace the per-repo commit check with a single GraphQL
- * contributionsCollection.commitContributionsByRepository query.
+ * This replaces the previous N+1 REST loop (one /commits call per org repo).
  */
 export async function listAuthenticatedUserRepos(
   token: string,
@@ -76,25 +154,12 @@ export async function listAuthenticatedUserRepos(
     token,
   );
 
-  const filtered: GitHubRepo[] = [];
-  for (const repo of repos) {
-    if (repo.owner.login === userLogin) {
-      filtered.push(repo);
-      continue;
-    }
+  const contributed = await fetchContributedRepoSet(token, userLogin);
 
-    try {
-      const commits = await ghFetch<unknown[]>(
-        `/repos/${repo.owner.login}/${repo.name}/commits?author=${userLogin}&per_page=1`,
-        token,
-      );
-      if (commits.length > 0) filtered.push(repo);
-    } catch {
-      // Empty repo (409), no access (404), rate-limited (403) — skip
-    }
-  }
-
-  return filtered;
+  return repos.filter((repo) => {
+    if (repo.owner.login === userLogin) return true;
+    return contributed.has(repo.full_name);
+  });
 }
 
 export async function getRepo(
@@ -177,10 +242,6 @@ export type GitHubContentEntry = {
   size?: number;
 };
 
-/**
- * Fetch the most recent commits on the default branch.
- * `maxPages` × 100 commits max. For MVP, 3 pages = 300 commits is plenty.
- */
 export async function fetchRecentCommits(
   token: string,
   owner: string,
@@ -200,10 +261,6 @@ export async function fetchRecentCommits(
   return all;
 }
 
-/**
- * Fetch file-level details for a commit (additions, filenames).
- * Expensive: one request per commit. Caller should cap the number.
- */
 export async function fetchCommitDetail(
   token: string,
   owner: string,
@@ -213,10 +270,6 @@ export async function fetchCommitDetail(
   return ghFetch<GitHubCommitDetail>(`/repos/${owner}/${repo}/commits/${sha}`, token);
 }
 
-/**
- * Fetch contributors sorted by contribution count.
- * Pages up to `maxPages` × 100.
- */
 export async function fetchContributors(
   token: string,
   owner: string,
@@ -235,10 +288,6 @@ export async function fetchContributors(
   return all;
 }
 
-/**
- * List files at the repo root (or any path) on a given ref.
- * Returns [] on 404 (empty repo / missing path).
- */
 export async function listContents(
   token: string,
   owner: string,
@@ -257,10 +306,6 @@ export async function listContents(
   }
 }
 
-/**
- * Read a single file's text content at a given ref.
- * Returns null on 404 or if the entry is not a file.
- */
 export async function readFileText(
   token: string,
   owner: string,

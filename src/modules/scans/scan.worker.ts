@@ -17,15 +17,13 @@ import {
   type CommitInfo,
   type CommitFile,
 } from './scan.context.js';
+import { detectors } from '../tools/detector.registry.js';
+import type { DetectionResult } from '../tools/detector.interface.js';
 
 const MAX_COMMIT_DETAIL_LOOKUPS = 30;
 const MAX_CONTRIBUTORS_PAGES = 2;
 const MAX_COMMITS_PAGES = 3;
 
-/**
- * Config files we try to read at the repo root. Missing ones are skipped.
- * Extend as detectors demand. Sorted roughly by cost (small files first).
- */
 const CONFIG_FILE_CANDIDATES = [
   'package.json',
   'package-lock.json',
@@ -73,10 +71,6 @@ const CONFIG_FILE_CANDIDATES = [
   'docusaurus.config.ts',
 ];
 
-/**
- * Config files that live in a subdirectory. `listContents` on the root
- * gives us directory listing; this fetches a fixed name inside a dir.
- */
 const CONFIG_SUBDIR_CANDIDATES = [
   { path: '.github/dependabot.yml' },
   { path: '.github/renovate.json' },
@@ -95,7 +89,6 @@ async function buildScanContext(
   name: string,
   defaultBranch: string,
 ): Promise<ScanContext> {
-  // ─── 1. Contributors ────────────────────────────────────────────────
   const contributorsRaw = await fetchContributors(
     token,
     owner,
@@ -107,7 +100,6 @@ async function buildScanContext(
     contributions: c.contributions,
   }));
 
-  // ─── 2. Recent commits ──────────────────────────────────────────────
   const commitsRaw = await fetchRecentCommits(
     token,
     owner,
@@ -116,7 +108,6 @@ async function buildScanContext(
     MAX_COMMITS_PAGES,
   );
 
-  // ─── 3. Commit details (capped) ─────────────────────────────────────
   const commits: CommitInfo[] = [];
   const detailTargets = commitsRaw.slice(0, MAX_COMMIT_DETAIL_LOOKUPS);
 
@@ -131,7 +122,6 @@ async function buildScanContext(
         deletions: f.deletions,
       }));
     } catch (err) {
-      // Large commit diffs sometimes 403/422 — skip files for this commit.
       logger.debug(
         `Skipping files for commit ${commit.sha.slice(0, 7)}: ${(err as Error).message}`,
       );
@@ -146,13 +136,9 @@ async function buildScanContext(
     });
   }
 
-  // ─── 4. Root listing ────────────────────────────────────────────────
   const root = await listContents(token, owner, name, '', defaultBranch);
-  const rootFiles = root
-    .filter((e) => e.type === 'file')
-    .map((e) => e.name);
+  const rootFiles = root.filter((e) => e.type === 'file').map((e) => e.name);
 
-  // ─── 5. Config files ────────────────────────────────────────────────
   const configFiles: Record<string, string> = {};
 
   for (const path of CONFIG_FILE_CANDIDATES) {
@@ -166,7 +152,6 @@ async function buildScanContext(
     if (content !== null) configFiles[path] = content;
   }
 
-  // ─── 6. GitHub Actions workflows ────────────────────────────────────
   const workflowEntries = await listContents(
     token,
     owner,
@@ -177,6 +162,13 @@ async function buildScanContext(
   const workflowFiles = workflowEntries
     .filter((e) => e.type === 'file')
     .map((e) => `.github/workflows/${e.name}`);
+
+  // Read workflow contents so detectors can inspect them
+  for (const wf of workflowFiles) {
+    if (wf in configFiles) continue;
+    const content = await readFileText(token, owner, name, wf, defaultBranch);
+    if (content !== null) configFiles[wf] = content;
+  }
 
   return {
     scanId,
@@ -193,6 +185,99 @@ async function buildScanContext(
   };
 }
 
+async function runDetectors(ctx: ScanContext): Promise<DetectionResult[]> {
+  const results: DetectionResult[] = [];
+  for (const detector of detectors) {
+    try {
+      const result = await detector.detect(ctx);
+      results.push(result);
+    } catch (err) {
+      logger.warn(
+        `Detector ${detector.name} failed: ${(err as Error).message}`,
+      );
+    }
+  }
+  return results;
+}
+
+async function persistToolUsage(
+  scanId: string,
+  repoId: string,
+  results: DetectionResult[],
+): Promise<void> {
+  if (results.length === 0) return;
+
+  // Wipe any stale rows for this scan (defensive; fresh scan → no rows)
+  await pool.query('DELETE FROM tool_usage WHERE scan_id = $1', [scanId]);
+
+  for (const r of results) {
+    // Repo-level row (contributor null)
+    await pool.query(
+      `INSERT INTO tool_usage
+         (scan_id, repo_id, tool_name, category, detected, adoption_rate,
+          contributor_id, contributor_login, evidence)
+       VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, $7)`,
+      [
+        scanId,
+        repoId,
+        r.tool,
+        r.category,
+        r.detected,
+        r.adoptionRate,
+        JSON.stringify(r.evidence),
+      ],
+    );
+
+    // Per-contributor rows (only when the detector reported them)
+    if (r.perContributor) {
+      for (const [login, used] of Object.entries(r.perContributor)) {
+        await pool.query(
+          `INSERT INTO tool_usage
+             (scan_id, repo_id, tool_name, category, detected, adoption_rate,
+              contributor_id, contributor_login, evidence)
+           VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8)`,
+          [
+            scanId,
+            repoId,
+            r.tool,
+            r.category,
+            r.detected,
+            used ? 100 : 0,
+            login,
+            JSON.stringify({ contributorEvidence: used }),
+          ],
+        );
+      }
+    }
+  }
+}
+
+function buildSummary(results: DetectionResult[]): Record<string, unknown> {
+  const tools = results.map((r) => ({
+    name: r.tool,
+    category: r.category,
+    detected: r.detected,
+    adoptionRate: r.adoptionRate,
+  }));
+
+  const detected = results.filter((r) => r.detected);
+  const adoptionScore =
+    detected.length > 0
+      ? Math.round(
+          (detected.reduce((sum, r) => sum + r.adoptionRate, 0) /
+            detected.length) *
+            100,
+        ) / 100
+      : 0;
+
+  return {
+    adoptionScore,
+    toolsChecked: results.length,
+    toolsDetected: detected.length,
+    tools,
+  };
+}
+
 async function processScan(job: Job<ScanJobData>): Promise<void> {
   const { scanId, repoId, requestedBy } = job.data;
   logger.info(`Worker picked up scan ${scanId} for repo ${repoId}`);
@@ -205,7 +290,6 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
   );
 
   try {
-    // ─── Repo metadata ────────────────────────────────────────────────
     const repoRow = await pool.query<{
       owner: string;
       name: string;
@@ -219,13 +303,11 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
     const repo = repoRow.rows[0];
     if (!repo) throw new Error(`Repository ${repoId} not found`);
 
-    // ─── User token ───────────────────────────────────────────────────
     const token = await getAccessTokenForUser(requestedBy);
     if (!token) {
       throw new Error(`No GitHub token available for user ${requestedBy}`);
     }
 
-    // ─── Build context ────────────────────────────────────────────────
     const ctx = await buildScanContext(
       token,
       scanId,
@@ -237,14 +319,10 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
 
     await saveScanContext(ctx);
 
-    // ─── Stub summary (Phase 6 will replace this) ─────────────────────
-    const summary = {
-      note: 'Phase 5 context cached — detectors not run yet',
-      commitsFetched: ctx.commits.length,
-      contributorsFetched: ctx.contributors.length,
-      configFilesFound: Object.keys(ctx.configFiles),
-      workflowFilesFound: ctx.workflowFiles,
-    };
+    const results = await runDetectors(ctx);
+    await persistToolUsage(scanId, repoId, results);
+
+    const summary = buildSummary(results);
 
     await pool.query(
       `UPDATE scans
@@ -256,9 +334,8 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
     );
 
     logger.info(
-      `Scan ${scanId} complete — ${ctx.commits.length} commits, ` +
-        `${ctx.contributors.length} contributors, ` +
-        `${Object.keys(ctx.configFiles).length} config files`,
+      `Scan ${scanId} complete — ${results.length} tools checked, ` +
+        `${results.filter((r) => r.detected).length} detected`,
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
