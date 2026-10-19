@@ -1,12 +1,5 @@
 import type { ToolDetector } from './detector.interface.js';
 import { jestDetector } from './detectors/jest.detector.js';
-
-export const detectors: ToolDetector[] = [
-  jestDetector,
-  // Phase 7 will append: eslintDetector, pytestDetector, blackDetector,
-  // githubActionsDetector
-];import type { ToolDetector } from './detector.interface.js';
-import { jestDetector } from './detectors/jest.detector.js';
 import { eslintDetector } from './detectors/eslint.detector.js';
 import { prettierDetector } from './detectors/prettier.detector.js';
 import { pytestDetector } from './detectors/pytest.detector.js';
