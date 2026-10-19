@@ -211,9 +211,9 @@ psql $DATABASE_URL -c "SELECT tool_name, detected, adoption_rate FROM tool_usage
 
 ---
 
-### Phase 7 — Remaining Detectors
+### Phase 7 — Remaining Detectors ✅
 
-**Goal:** ESLint, pytest, Black, GitHub Actions detectors all work.
+**Goal:** ESLint, pytest, Black, GitHub Actions, and other detectors all work.
 
 **Files created:**
 
@@ -222,11 +222,12 @@ src/modules/tools/detectors/eslint.detector.ts
 src/modules/tools/detectors/pytest.detector.ts
 src/modules/tools/detectors/black.detector.ts
 src/modules/tools/detectors/github-actions.detector.ts
+.......
 ```
 
 **Acceptance test:** Run a scan on 3 different real repos (JS, Python, mixed) and verify each detector produces sensible `detected` / `adoption_rate` values.
 
-**Status:** NOT STARTED
+**Status:** COMPLETE
 
 ---
 
