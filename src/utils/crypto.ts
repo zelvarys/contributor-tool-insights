@@ -25,7 +25,18 @@ export function encryptToken(plaintext: string): string {
 }
 
 export function decryptToken(payload: string): string {
+  if (!payload || payload.trim() === '') {
+    throw new Error('Empty token payload');
+  }
+
   const buf = Buffer.from(payload, 'base64');
+
+  // Minimum valid length = IV (12) + auth tag (16) = 28 bytes.
+  // Anything shorter cannot be a well-formed ciphertext.
+  if (buf.length < IV_LENGTH + TAG_LENGTH) {
+    throw new Error('Token payload too short to be valid ciphertext');
+  }
+
   const iv = buf.subarray(0, IV_LENGTH);
   const tag = buf.subarray(buf.length - TAG_LENGTH);
   const ciphertext = buf.subarray(IV_LENGTH, buf.length - TAG_LENGTH);
