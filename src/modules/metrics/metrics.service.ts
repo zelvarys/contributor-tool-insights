@@ -6,6 +6,7 @@ export type ToolMetric = {
   category: string;
   detected: boolean;
   relevant: boolean;
+  tracked: boolean;
   adoptionRate: number;
   contributorCount: number;
   contributorsUsing: number;
@@ -24,25 +25,17 @@ export type RepoMetrics = {
   languages: string[];
   toolsChecked: number;
   toolsRelevant: number;
+  toolsTracked: number;
   toolsDetected: number;
   tools: ToolMetric[];
 };
 
-/**
- * Tools whose "per-contributor adoption" signal is really just
- * "this contributor committed recently." Reported for visibility,
- * excluded from adoptionScore.
- */
 const COMMIT_PRESENCE_TOOLS = new Set([
   'github-actions',
   'dependabot',
   'renovate',
 ]);
 
-/**
- * Language-specific tools. Relevant only when the matching language is
- * detected in the repo.
- */
 const JS_TOOLS = new Set(['jest', 'eslint', 'prettier']);
 const PYTHON_TOOLS = new Set(['pytest', 'black', 'ruff']);
 const GO_TOOLS = new Set(['go-test', 'golangci-lint']);
@@ -61,40 +54,40 @@ function detectLanguages(input: {
   configFileKeys: string[];
 }): DetectedLanguages {
   const { rootFiles, commitFilenames, configFileKeys } = input;
-
   const allFiles = [...rootFiles, ...commitFilenames];
   const configs = new Set(configFileKeys);
-
   const hasExt = (ext: string) => allFiles.some((f) => f.endsWith(ext));
   const hasConfig = (...paths: string[]) => paths.some((p) => configs.has(p));
 
-  const js =
-    hasConfig('package.json') ||
-    hasExt('.js') ||
-    hasExt('.jsx') ||
-    hasExt('.ts') ||
-    hasExt('.tsx') ||
-    hasExt('.mjs') ||
-    hasExt('.cjs');
-
-  const python =
-    hasConfig(
-      'pyproject.toml',
-      'setup.py',
-      'setup.cfg',
-      'requirements.txt',
-      'pytest.ini',
-      'tox.ini',
-    ) ||
-    hasExt('.py');
-
-  const go = hasConfig('go.mod', 'go.sum') || hasExt('.go');
-
-  const php =
-    hasConfig('composer.json', 'composer.lock', 'phpunit.xml', 'phpunit.xml.dist') ||
-    hasExt('.php');
-
-  return { js, python, go, php };
+  return {
+    js:
+      hasConfig('package.json') ||
+      hasExt('.js') ||
+      hasExt('.jsx') ||
+      hasExt('.ts') ||
+      hasExt('.tsx') ||
+      hasExt('.mjs') ||
+      hasExt('.cjs'),
+    python:
+      hasConfig(
+        'pyproject.toml',
+        'setup.py',
+        'setup.cfg',
+        'requirements.txt',
+        'pytest.ini',
+        'tox.ini',
+      ) ||
+      hasExt('.py'),
+    go: hasConfig('go.mod', 'go.sum') || hasExt('.go'),
+    php:
+      hasConfig(
+        'composer.json',
+        'composer.lock',
+        'phpunit.xml',
+        'phpunit.xml.dist',
+      ) ||
+      hasExt('.php'),
+  };
 }
 
 function isToolRelevant(toolName: string, langs: DetectedLanguages): boolean {
@@ -102,7 +95,6 @@ function isToolRelevant(toolName: string, langs: DetectedLanguages): boolean {
   if (PYTHON_TOOLS.has(toolName)) return langs.python;
   if (GO_TOOLS.has(toolName)) return langs.go;
   if (PHP_TOOLS.has(toolName)) return langs.php;
-  // pre-commit, github-actions, dependabot, renovate — always relevant
   return true;
 }
 
@@ -113,6 +105,17 @@ function languagesToArray(langs: DetectedLanguages): string[] {
   if (langs.go) out.push('go');
   if (langs.php) out.push('php');
   return out;
+}
+
+async function loadCachedContext(
+  scanId: string,
+): Promise<import('../scans/scan.context.js').ScanContext | null> {
+  try {
+    const mod = await import('../scans/scan.context.js');
+    return await mod.loadScanContext(scanId);
+  } catch {
+    return null;
+  }
 }
 
 export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
@@ -143,6 +146,7 @@ export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
       languages: [],
       toolsChecked: 0,
       toolsRelevant: 0,
+      toolsTracked: 0,
       toolsDetected: 0,
       tools: [],
     };
@@ -172,6 +176,16 @@ export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
     [scan.id],
   );
 
+  const trackedRows = await pool.query<{
+    tool_name: string;
+    enabled: boolean;
+  }>(
+    `SELECT tool_name, enabled FROM tracked_tools WHERE repo_id = $1`,
+    [repoId],
+  );
+  const trackedMap = new Map<string, boolean>();
+  for (const r of trackedRows.rows) trackedMap.set(r.tool_name, r.enabled);
+
   const perToolStats = new Map<
     string,
     { contributorCount: number; contributorsUsing: number }
@@ -187,10 +201,7 @@ export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
     perToolStats.set(row.tool_name, entry);
   }
 
-  // ─── Language detection ────────────────────────────────────────────
-  // The scan context is cached in Redis with a 1h TTL. If it's still
-  // around, use it — otherwise fall back to signals we can derive from
-  // the tool_usage evidence (less precise but zero Redis dependency).
+  // Languages from cached context, or inferred from tool detections
   const ctx = await loadCachedContext(scan.id);
   let languages: DetectedLanguages;
   if (ctx) {
@@ -203,34 +214,33 @@ export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
       configFileKeys: Object.keys(ctx.configFiles),
     });
   } else {
-    // Fallback: infer from which language-specific tools were detected.
-    // Conservative — if nothing was detected we can't guess.
-    const detectedToolNames = new Set(
+    const detectedNames = new Set(
       toolRows.rows.filter((r) => r.detected).map((r) => r.tool_name),
     );
     languages = {
       js:
-        detectedToolNames.has('jest') ||
-        detectedToolNames.has('eslint') ||
-        detectedToolNames.has('prettier'),
+        detectedNames.has('jest') ||
+        detectedNames.has('eslint') ||
+        detectedNames.has('prettier'),
       python:
-        detectedToolNames.has('pytest') ||
-        detectedToolNames.has('black') ||
-        detectedToolNames.has('ruff'),
+        detectedNames.has('pytest') ||
+        detectedNames.has('black') ||
+        detectedNames.has('ruff'),
       go:
-        detectedToolNames.has('go-test') ||
-        detectedToolNames.has('golangci-lint'),
-      php: detectedToolNames.has('phpunit'),
+        detectedNames.has('go-test') || detectedNames.has('golangci-lint'),
+      php: detectedNames.has('phpunit'),
     };
   }
 
   const tools: ToolMetric[] = toolRows.rows.map((row) => {
     const stats = perToolStats.get(row.tool_name);
+    const tracked = trackedMap.get(row.tool_name) ?? false;
     return {
       name: row.tool_name,
       category: row.category,
       detected: row.detected,
       relevant: isToolRelevant(row.tool_name, languages),
+      tracked,
       adoptionRate: Number(row.adoption_rate),
       contributorCount: stats?.contributorCount ?? 0,
       contributorsUsing: stats?.contributorsUsing ?? 0,
@@ -239,13 +249,23 @@ export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
     };
   });
 
-  // ─── Score ─────────────────────────────────────────────────────────
-  const relevantTools = tools.filter((t) => t.relevant);
-  const detectedRelevant = relevantTools.filter((t) => t.detected);
-  const scoredTools = detectedRelevant.filter((t) => t.countsTowardScore);
+  // Denominator: user's tracked + enabled tools
+  const trackedTools = tools.filter((t) => t.tracked);
+
+  // Numeric edge case: if user hasn't curated anything yet and no backfill
+  // has happened (e.g. no scan has ever run for this repo), fall back to
+  // "everything detected and relevant" so the endpoint doesn't silently
+  // return 0 on a fresh repo.
+  const scoringSet =
+    trackedTools.length > 0
+      ? trackedTools
+      : tools.filter((t) => t.relevant && t.detected);
+
+  const detectedInSet = scoringSet.filter((t) => t.detected);
+  const scoredTools = detectedInSet.filter((t) => t.countsTowardScore);
 
   const coverage =
-    relevantTools.length > 0 ? detectedRelevant.length / relevantTools.length : 0;
+    scoringSet.length > 0 ? detectedInSet.length / scoringSet.length : 0;
   const adoption =
     scoredTools.length > 0
       ? scoredTools.reduce((sum, t) => sum + t.adoptionRate, 0) /
@@ -264,25 +284,9 @@ export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
     adoption: Math.round(adoption * 100) / 100,
     languages: languagesToArray(languages),
     toolsChecked: tools.length,
-    toolsRelevant: relevantTools.length,
-    toolsDetected: detectedRelevant.length,
+    toolsRelevant: tools.filter((t) => t.relevant).length,
+    toolsTracked: scoringSet.length,
+    toolsDetected: detectedInSet.length,
     tools,
   };
-}
-
-/**
- * Best-effort load of the Redis scan context. Returns null if it has
- * expired or was never written (e.g. backfilling old scans).
- * Kept inline so metrics.service doesn't grow a hard dependency on
- * Redis for correctness — the fallback path still works.
- */
-async function loadCachedContext(
-  scanId: string,
-): Promise<import('../scans/scan.context.js').ScanContext | null> {
-  try {
-    const mod = await import('../scans/scan.context.js');
-    return await mod.loadScanContext(scanId);
-  } catch {
-    return null;
-  }
 }

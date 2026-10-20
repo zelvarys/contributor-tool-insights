@@ -9,6 +9,7 @@ import { authRoutes } from './modules/auth/auth.routes.js';
 import { repositoryRoutes } from './modules/repositories/repository.routes.js';
 import { scanRoutes } from './modules/scans/scan.routes.js';
 import { metricsRoutes } from './modules/metrics/metrics.routes.js';
+import { trackedToolsRoutes } from './modules/tracked-tools/tracked-tools.routes.js';
 
 export function createApp(): Express {
   const app = express();
@@ -41,6 +42,7 @@ export function createApp(): Express {
   app.use('/repos', repositoryRoutes);
   app.use(scanRoutes);
   app.use(metricsRoutes);
+  app.use(trackedToolsRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
