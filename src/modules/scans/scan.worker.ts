@@ -19,6 +19,7 @@ import {
 } from './scan.context.js';
 import { detectors } from '../tools/detector.registry.js';
 import type { DetectionResult } from '../tools/detector.interface.js';
+import { backfillTrackedToolsFromScan } from '../tracked-tools/tracked-tools.service.js';
 
 const MAX_COMMIT_DETAIL_LOOKUPS = 30;
 const MAX_CONTRIBUTORS_PAGES = 2;
@@ -266,6 +267,51 @@ async function persistToolUsage(
   }
 }
 
+function detectLanguagesFromContext(ctx: ScanContext): {
+  js: boolean;
+  python: boolean;
+  go: boolean;
+  php: boolean;
+} {
+  const commitFilenames = ctx.commits.flatMap((c) =>
+    c.files.map((f) => f.filename),
+  );
+  const allFiles = [...ctx.rootFiles, ...commitFilenames];
+  const configs = new Set(Object.keys(ctx.configFiles));
+  const hasExt = (ext: string) => allFiles.some((f) => f.endsWith(ext));
+  const hasConfig = (...paths: string[]) => paths.some((p) => configs.has(p));
+
+  return {
+    js:
+      hasConfig('package.json') ||
+      hasExt('.js') ||
+      hasExt('.jsx') ||
+      hasExt('.ts') ||
+      hasExt('.tsx') ||
+      hasExt('.mjs') ||
+      hasExt('.cjs'),
+    python:
+      hasConfig(
+        'pyproject.toml',
+        'setup.py',
+        'setup.cfg',
+        'requirements.txt',
+        'pytest.ini',
+        'tox.ini',
+      ) ||
+      hasExt('.py'),
+    go: hasConfig('go.mod', 'go.sum') || hasExt('.go'),
+    php:
+      hasConfig(
+        'composer.json',
+        'composer.lock',
+        'phpunit.xml',
+        'phpunit.xml.dist',
+      ) ||
+      hasExt('.php'),
+  };
+}
+
 function buildSummary(results: DetectionResult[]): Record<string, unknown> {
   const tools = results.map((r) => ({
     name: r.tool,
@@ -336,6 +382,26 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
     const results = await runDetectors(ctx);
     await persistToolUsage(scanId, repoId, results);
 
+    // Backfill tracked_tools from detected + relevant tools.
+    // Existing rows are preserved — user choices win.
+    const languages = detectLanguagesFromContext(ctx);
+    try {
+      await backfillTrackedToolsFromScan(
+        repoId,
+        results.map((r) => ({
+          toolName: r.tool,
+          detected: r.detected,
+          category: r.category,
+        })),
+        languages,
+      );
+    } catch (err) {
+      // Non-fatal — the scan itself succeeded, backfill is best-effort
+      logger.warn(
+        `tracked_tools backfill failed for repo ${repoId}: ${(err as Error).message}`,
+      );
+    }
+
     const summary = buildSummary(results);
 
     await pool.query(
@@ -356,8 +422,8 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
     await pool.query(
       `UPDATE scans
        SET status = 'failed',
-           completed_at = NOW(),
-           error = $2
+         completed_at = NOW(),
+         error = $2
        WHERE id = $1`,
       [scanId, message],
     );
