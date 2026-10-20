@@ -231,7 +231,7 @@ src/modules/tools/detectors/github-actions.detector.ts
 
 ---
 
-### Phase 8 — Metrics Aggregation
+### Phase 8 — Metrics Aggregation ✅
 
 **Goal:** `GET /repos/:id/metrics` returns the current adoption score and per-tool breakdown.
 
@@ -256,7 +256,7 @@ curl http://localhost:3000/repos/<id>/metrics -b "token=..."
 #   }
 ```
 
-**Status:** NOT STARTED
+**Status:** COMPLETE
 
 ---
 
