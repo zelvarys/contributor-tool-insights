@@ -31,63 +31,22 @@ const MAX_CONTRIBUTORS_PAGES = 2;
 const MAX_COMMITS_PAGES = 3;
 
 const CONFIG_FILE_CANDIDATES = [
-  'package.json',
-  'package-lock.json',
-  'yarn.lock',
-  'pnpm-lock.yaml',
-
-  '.eslintrc',
-  '.eslintrc.json',
-  '.eslintrc.js',
-  '.eslintrc.cjs',
-  '.eslintrc.yml',
-  '.eslintrc.yaml',
-  'eslint.config.js',
-  'eslint.config.mjs',
-  'eslint.config.cjs',
-
-  '.prettierrc',
-  '.prettierrc.json',
-  '.prettierrc.js',
-  '.prettierrc.cjs',
-  '.prettierrc.yml',
-  '.prettierrc.yaml',
-  'prettier.config.js',
-  'prettier.config.cjs',
-
-  'jest.config.js',
-  'jest.config.ts',
-  'jest.config.mjs',
-  'jest.config.cjs',
-  'jest.config.json',
-
-  'pyproject.toml',
-  'setup.cfg',
-  'setup.py',
-  'requirements.txt',
-  'pytest.ini',
-  'tox.ini',
-  'ruff.toml',
-  '.ruff.toml',
-
-  'go.mod',
-  'go.sum',
-  '.golangci.yml',
-  '.golangci.yaml',
-  '.golangci.toml',
-  '.golangci.json',
-
-  'composer.json',
-  'composer.lock',
-  'phpunit.xml',
-  'phpunit.xml.dist',
-
-  'Gemfile',
-  '.rubocop.yml',
-
-  'mkdocs.yml',
-  'docusaurus.config.js',
-  'docusaurus.config.ts',
+  'package.json', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
+  '.eslintrc', '.eslintrc.json', '.eslintrc.js', '.eslintrc.cjs',
+  '.eslintrc.yml', '.eslintrc.yaml',
+  'eslint.config.js', 'eslint.config.mjs', 'eslint.config.cjs',
+  '.prettierrc', '.prettierrc.json', '.prettierrc.js', '.prettierrc.cjs',
+  '.prettierrc.yml', '.prettierrc.yaml',
+  'prettier.config.js', 'prettier.config.cjs',
+  'jest.config.js', 'jest.config.ts', 'jest.config.mjs',
+  'jest.config.cjs', 'jest.config.json',
+  'pyproject.toml', 'setup.cfg', 'setup.py', 'requirements.txt',
+  'pytest.ini', 'tox.ini', 'ruff.toml', '.ruff.toml',
+  'go.mod', 'go.sum',
+  '.golangci.yml', '.golangci.yaml', '.golangci.toml', '.golangci.json',
+  'composer.json', 'composer.lock', 'phpunit.xml', 'phpunit.xml.dist',
+  'Gemfile', '.rubocop.yml',
+  'mkdocs.yml', 'docusaurus.config.js', 'docusaurus.config.ts',
 ];
 
 const CONFIG_SUBDIR_CANDIDATES = [
@@ -114,22 +73,14 @@ async function buildScanContext(
   defaultBranch: string,
 ): Promise<ScanContext> {
   const contributorsRaw = await fetchContributors(
-    token,
-    owner,
-    name,
-    MAX_CONTRIBUTORS_PAGES,
+    token, owner, name, MAX_CONTRIBUTORS_PAGES,
   );
   const contributors = contributorsRaw.map((c) => ({
-    login: c.login,
-    contributions: c.contributions,
+    login: c.login, contributions: c.contributions,
   }));
 
   const commitsRaw = await fetchRecentCommits(
-    token,
-    owner,
-    name,
-    defaultBranch,
-    MAX_COMMITS_PAGES,
+    token, owner, name, defaultBranch, MAX_COMMITS_PAGES,
   );
 
   const commits: CommitInfo[] = [];
@@ -164,24 +115,18 @@ async function buildScanContext(
   const rootFiles = root.filter((e) => e.type === 'file').map((e) => e.name);
 
   const configFiles: Record<string, string> = {};
-
   for (const path of CONFIG_FILE_CANDIDATES) {
     if (!rootFiles.includes(path)) continue;
     const content = await readFileText(token, owner, name, path, defaultBranch);
     if (content !== null) configFiles[path] = content;
   }
-
   for (const { path } of CONFIG_SUBDIR_CANDIDATES) {
     const content = await readFileText(token, owner, name, path, defaultBranch);
     if (content !== null) configFiles[path] = content;
   }
 
   const workflowEntries = await listContents(
-    token,
-    owner,
-    name,
-    '.github/workflows',
-    defaultBranch,
+    token, owner, name, '.github/workflows', defaultBranch,
   );
   const workflowFiles = workflowEntries
     .filter((e) => e.type === 'file')
@@ -194,17 +139,9 @@ async function buildScanContext(
   }
 
   return {
-    scanId,
-    repoId,
-    owner,
-    name,
-    defaultBranch,
+    scanId, repoId, owner, name, defaultBranch,
     fetchedAt: new Date().toISOString(),
-    commits,
-    contributors,
-    rootFiles,
-    configFiles,
-    workflowFiles,
+    commits, contributors, rootFiles, configFiles, workflowFiles,
   };
 }
 
@@ -212,12 +149,9 @@ async function runDetectors(ctx: ScanContext): Promise<DetectionResult[]> {
   const results: DetectionResult[] = [];
   for (const detector of detectors) {
     try {
-      const result = await detector.detect(ctx);
-      results.push(result);
+      results.push(await detector.detect(ctx));
     } catch (err) {
-      logger.warn(
-        `Detector ${detector.name} failed: ${(err as Error).message}`,
-      );
+      logger.warn(`Detector ${detector.name} failed: ${(err as Error).message}`);
     }
   }
   return results;
@@ -229,7 +163,6 @@ async function persistToolUsage(
   results: DetectionResult[],
 ): Promise<void> {
   if (results.length === 0) return;
-
   await pool.query('DELETE FROM tool_usage WHERE scan_id = $1', [scanId]);
 
   for (const r of results) {
@@ -238,15 +171,8 @@ async function persistToolUsage(
          (scan_id, repo_id, tool_name, category, detected, adoption_rate,
           contributor_id, contributor_login, evidence)
        VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, $7)`,
-      [
-        scanId,
-        repoId,
-        r.tool,
-        r.category,
-        r.detected,
-        r.adoptionRate,
-        JSON.stringify(r.evidence),
-      ],
+      [scanId, repoId, r.tool, r.category, r.detected, r.adoptionRate,
+       JSON.stringify(r.evidence)],
     );
 
     if (r.perContributor) {
@@ -256,16 +182,8 @@ async function persistToolUsage(
              (scan_id, repo_id, tool_name, category, detected, adoption_rate,
               contributor_id, contributor_login, evidence)
            VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8)`,
-          [
-            scanId,
-            repoId,
-            r.tool,
-            r.category,
-            r.detected,
-            used ? 100 : 0,
-            login,
-            JSON.stringify({ contributorEvidence: used }),
-          ],
+          [scanId, repoId, r.tool, r.category, r.detected,
+           used ? 100 : 0, login, JSON.stringify({ contributorEvidence: used })],
         );
       }
     }
@@ -273,10 +191,7 @@ async function persistToolUsage(
 }
 
 function detectLanguagesFromContext(ctx: ScanContext): {
-  js: boolean;
-  python: boolean;
-  go: boolean;
-  php: boolean;
+  js: boolean; python: boolean; go: boolean; php: boolean;
 } {
   const commitFilenames = ctx.commits.flatMap((c) =>
     c.files.map((f) => f.filename),
@@ -287,54 +202,29 @@ function detectLanguagesFromContext(ctx: ScanContext): {
   const hasConfig = (...paths: string[]) => paths.some((p) => configs.has(p));
 
   return {
-    js:
-      hasConfig('package.json') ||
-      hasExt('.js') ||
-      hasExt('.jsx') ||
-      hasExt('.ts') ||
-      hasExt('.tsx') ||
-      hasExt('.mjs') ||
-      hasExt('.cjs'),
-    python:
-      hasConfig(
-        'pyproject.toml',
-        'setup.py',
-        'setup.cfg',
-        'requirements.txt',
-        'pytest.ini',
-        'tox.ini',
-      ) ||
-      hasExt('.py'),
-    go: hasConfig('go.mod', 'go.sum') || hasExt('.go'),
-    php:
-      hasConfig(
-        'composer.json',
-        'composer.lock',
-        'phpunit.xml',
-        'phpunit.xml.dist',
-      ) ||
-      hasExt('.php'),
+    js: hasConfig('package.json') || hasExt('.js') || hasExt('.jsx') ||
+        hasExt('.ts') || hasExt('.tsx') || hasExt('.mjs') || hasExt('.cjs'),
+    python: hasConfig('pyproject.toml','setup.py','setup.cfg',
+                      'requirements.txt','pytest.ini','tox.ini') || hasExt('.py'),
+    go: hasConfig('go.mod','go.sum') || hasExt('.go'),
+    php: hasConfig('composer.json','composer.lock','phpunit.xml',
+                   'phpunit.xml.dist') || hasExt('.php'),
   };
 }
 
 function buildSummary(results: DetectionResult[]): Record<string, unknown> {
   const tools = results.map((r) => ({
-    name: r.tool,
-    category: r.category,
-    detected: r.detected,
-    adoptionRate: r.adoptionRate,
+    name: r.tool, category: r.category,
+    detected: r.detected, adoptionRate: r.adoptionRate,
   }));
-
   const detected = results.filter((r) => r.detected);
   const adoptionScore =
     detected.length > 0
       ? Math.round(
-          (detected.reduce((sum, r) => sum + r.adoptionRate, 0) /
-            detected.length) *
+          (detected.reduce((s, r) => s + r.adoptionRate, 0) / detected.length) *
             100,
         ) / 100
       : 0;
-
   return {
     adoptionScore,
     toolsChecked: results.length,
@@ -343,26 +233,20 @@ function buildSummary(results: DetectionResult[]): Record<string, unknown> {
   };
 }
 
-async function processScan(job: Job<ScanJobData>): Promise<void> {
+async function processScanJob(job: { data: ScanJobData }): Promise<void> {
   const { scanId, repoId, requestedBy } = job.data;
   logger.info(`Worker picked up scan ${scanId} for repo ${repoId}`);
 
   await pool.query(
-    `UPDATE scans
-     SET status = 'running', started_at = NOW()
-     WHERE id = $1`,
+    `UPDATE scans SET status = 'running', started_at = NOW() WHERE id = $1`,
     [scanId],
   );
 
   try {
     const repoRow = await pool.query<{
-      owner: string;
-      name: string;
-      default_branch: string;
+      owner: string; name: string; default_branch: string;
     }>(
-      `SELECT owner, name, default_branch
-       FROM repositories
-       WHERE id = $1`,
+      `SELECT owner, name, default_branch FROM repositories WHERE id = $1`,
       [repoId],
     );
     const repo = repoRow.rows[0];
@@ -374,14 +258,8 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
     }
 
     const ctx = await buildScanContext(
-      token,
-      scanId,
-      repoId,
-      repo.owner,
-      repo.name,
-      repo.default_branch,
+      token, scanId, repoId, repo.owner, repo.name, repo.default_branch,
     );
-
     await saveScanContext(ctx);
 
     const results = await runDetectors(ctx);
@@ -392,9 +270,7 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
       await backfillTrackedToolsFromScan(
         repoId,
         results.map((r) => ({
-          toolName: r.tool,
-          detected: r.detected,
-          category: r.category,
+          toolName: r.tool, detected: r.detected, category: r.category,
         })),
         languages,
       );
@@ -407,10 +283,7 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
     const summary = buildSummary(results);
 
     const completed = await pool.query(
-      `UPDATE scans
-       SET status = 'complete',
-           completed_at = NOW(),
-           summary = $2
+      `UPDATE scans SET status = 'complete', completed_at = NOW(), summary = $2
        WHERE id = $1
        RETURNING id, repo_id, status, started_at, completed_at, error,
                  summary, created_at`,
@@ -420,21 +293,16 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
     const row = completed.rows[0];
     if (row) {
       const scanRow: ScanRow = {
-        id: row.id,
-        repoId: row.repo_id,
-        status: row.status,
+        id: row.id, repoId: row.repo_id, status: row.status,
         startedAt: row.started_at?.toISOString() ?? null,
         completedAt: row.completed_at?.toISOString() ?? null,
-        error: row.error,
-        summary: row.summary,
+        error: row.error, summary: row.summary,
         createdAt: row.created_at.toISOString(),
       };
       try {
         await cacheCompletedScan(scanRow);
       } catch (err) {
-        logger.warn(
-          `Failed to cache scan ${scanId}: ${(err as Error).message}`,
-        );
+        logger.warn(`Failed to cache scan ${scanId}: ${(err as Error).message}`);
       }
     }
 
@@ -445,10 +313,7 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await pool.query(
-      `UPDATE scans
-       SET status = 'failed',
-           completed_at = NOW(),
-           error = $2
+      `UPDATE scans SET status = 'failed', completed_at = NOW(), error = $2
        WHERE id = $1`,
       [scanId, message],
     );
@@ -465,28 +330,36 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
 }
 
 export function startWorker(): Worker<ScanJobData> {
-  const worker = new Worker<ScanJobData>(SCAN_QUEUE_NAME, processScan, {
-    connection: createRedisConnection(),
-    concurrency: 2,
-  });
-
-  worker.on('ready', () => logger.info(`Scan worker ready (queue: ${SCAN_QUEUE_NAME})`));
+  const worker = new Worker<ScanJobData>(
+    SCAN_QUEUE_NAME,
+    async (job: Job<ScanJobData>) => processScanJob(job),
+    { connection: createRedisConnection(), concurrency: 2 },
+  );
+  worker.on('ready', () =>
+    logger.info(`Scan worker ready (queue: ${SCAN_QUEUE_NAME})`),
+  );
   worker.on('failed', (job, err) =>
     logger.error(`Job ${job?.id} failed: ${err.message}`),
   );
-
   return worker;
+}
+
+/**
+ * Test-only entrypoint: runs a single scan synchronously without BullMQ.
+ * Not exported from any other module. Integration tests import this to
+ * keep the pipeline deterministic.
+ */
+export async function processScanJobForTests(job: { data: ScanJobData }): Promise<void> {
+  await processScanJob(job);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const worker = startWorker();
-
   const shutdown = async (signal: string) => {
     logger.info(`${signal} received — closing scan worker`);
     await worker.close();
     process.exit(0);
   };
-
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 }
