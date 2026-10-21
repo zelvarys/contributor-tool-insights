@@ -10,6 +10,7 @@ import { repositoryRoutes } from './modules/repositories/repository.routes.js';
 import { scanRoutes } from './modules/scans/scan.routes.js';
 import { metricsRoutes } from './modules/metrics/metrics.routes.js';
 import { trackedToolsRoutes } from './modules/tracked-tools/tracked-tools.routes.js';
+import { rateLimit } from './middleware/rate-limit.middleware.js';
 
 export function createApp(): Express {
   const app = express();
@@ -38,10 +39,21 @@ export function createApp(): Express {
     });
   });
 
-  app.use('/auth', authRoutes);
-  app.use('/repos', repositoryRoutes);
-  app.use(scanRoutes);
-  app.use(metricsRoutes);
+  const globalLimiter = rateLimit({
+    name: 'global',
+    windowSeconds: 60,
+    max: 300,
+  });
+  const metricsLimiter = rateLimit({
+    name: 'metrics',
+    windowSeconds: 60,
+    max: 120,
+  });
+
+  app.use('/auth', globalLimiter, authRoutes);
+  app.use('/repos', globalLimiter, repositoryRoutes);
+  app.use(scanRoutes); // scanLimiter lives inside scan.routes.ts
+  app.use(metricsLimiter, metricsRoutes);
   app.use(trackedToolsRoutes);
 
   app.use(notFoundHandler);

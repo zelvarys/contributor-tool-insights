@@ -20,6 +20,11 @@ import {
 import { detectors } from '../tools/detector.registry.js';
 import type { DetectionResult } from '../tools/detector.interface.js';
 import { backfillTrackedToolsFromScan } from '../tracked-tools/tracked-tools.service.js';
+import {
+  cacheCompletedScan,
+  invalidateScanCache,
+  type ScanRow,
+} from './scan.service.js';
 
 const MAX_COMMIT_DETAIL_LOOKUPS = 30;
 const MAX_CONTRIBUTORS_PAGES = 2;
@@ -382,8 +387,6 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
     const results = await runDetectors(ctx);
     await persistToolUsage(scanId, repoId, results);
 
-    // Backfill tracked_tools from detected + relevant tools.
-    // Existing rows are preserved — user choices win.
     const languages = detectLanguagesFromContext(ctx);
     try {
       await backfillTrackedToolsFromScan(
@@ -396,7 +399,6 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
         languages,
       );
     } catch (err) {
-      // Non-fatal — the scan itself succeeded, backfill is best-effort
       logger.warn(
         `tracked_tools backfill failed for repo ${repoId}: ${(err as Error).message}`,
       );
@@ -404,14 +406,37 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
 
     const summary = buildSummary(results);
 
-    await pool.query(
+    const completed = await pool.query(
       `UPDATE scans
        SET status = 'complete',
            completed_at = NOW(),
            summary = $2
-       WHERE id = $1`,
+       WHERE id = $1
+       RETURNING id, repo_id, status, started_at, completed_at, error,
+                 summary, created_at`,
       [scanId, JSON.stringify(summary)],
     );
+
+    const row = completed.rows[0];
+    if (row) {
+      const scanRow: ScanRow = {
+        id: row.id,
+        repoId: row.repo_id,
+        status: row.status,
+        startedAt: row.started_at?.toISOString() ?? null,
+        completedAt: row.completed_at?.toISOString() ?? null,
+        error: row.error,
+        summary: row.summary,
+        createdAt: row.created_at.toISOString(),
+      };
+      try {
+        await cacheCompletedScan(scanRow);
+      } catch (err) {
+        logger.warn(
+          `Failed to cache scan ${scanId}: ${(err as Error).message}`,
+        );
+      }
+    }
 
     logger.info(
       `Scan ${scanId} complete — ${results.length} tools checked, ` +
@@ -422,11 +447,18 @@ async function processScan(job: Job<ScanJobData>): Promise<void> {
     await pool.query(
       `UPDATE scans
        SET status = 'failed',
-         completed_at = NOW(),
-         error = $2
+           completed_at = NOW(),
+           error = $2
        WHERE id = $1`,
       [scanId, message],
     );
+    try {
+      await invalidateScanCache(repoId);
+    } catch (cacheErr) {
+      logger.warn(
+        `Failed to invalidate cache for repo ${repoId}: ${(cacheErr as Error).message}`,
+      );
+    }
     logger.error(`Scan ${scanId} failed: ${message}`);
     throw err;
   }
