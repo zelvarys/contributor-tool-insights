@@ -260,7 +260,7 @@ curl http://localhost:3000/repos/<id>/metrics -b "token=..."
 
 ---
 
-### Phase 9 — Caching + Rate Limit Guard
+### Phase 9 — Caching + Rate Limit Guard ✅
 
 **Goal:** Repo scans are cached; repeated scans within 1 hour return cached results. GitHub rate-limit headers respected.
 
@@ -283,26 +283,45 @@ src/modules/scans/scan.service.ts
 - Two rapid scans produce one GitHub API hit (verify in logs).
 - Trigger 100 requests → 429 after threshold.
 
-**Status:** NOT STARTED
+**Status:** COMPLETE
 
 ---
 
-### Phase 10 — Hardening + Tests
+### Phase 10 — Hardening + Tests 
 
-**Goal:** Unit tests for detectors, integration test for the scan pipeline, and structured error responses.
+**Goal:** Unit tests for detectors, integration tests for auth and the scan pipeline, per-request IDs, and structured JSON errors.
 
 **Files created:**
 
 ```
+vitest.config.ts
+tests/helpers/context.ts
+tests/helpers/db.ts
+tests/unit/jwt.test.ts
+tests/unit/crypto.test.ts
 tests/unit/detectors/jest.detector.test.ts
+tests/unit/detectors/eslint.detector.test.ts
+tests/unit/detectors/pytest.detector.test.ts
+tests/integration/auth.test.ts
 tests/integration/scan.test.ts
+```
+
+**Files modified:**
+
+```
+src/modules/scans/scan.worker.ts
+src/middleware/error.middleware.ts
+src/app.ts
+package.json
 ```
 
 **Acceptance test:**
 
 ```bash
 npm test
-# → all green
+# → all suites green
+npm run typecheck
+# → silent
 ```
 
 **Status:** NOT STARTED

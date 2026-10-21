@@ -1,5 +1,6 @@
 import { pool } from '../../config/database.js';
 import { getTrackedRepository } from '../repositories/repository.service.js';
+import { cacheGet, cacheSet, cacheKeys } from '../../utils/cache.js';
 
 export type ToolMetric = {
   name: string;
@@ -40,6 +41,8 @@ const JS_TOOLS = new Set(['jest', 'eslint', 'prettier']);
 const PYTHON_TOOLS = new Set(['pytest', 'black', 'ruff']);
 const GO_TOOLS = new Set(['go-test', 'golangci-lint']);
 const PHP_TOOLS = new Set(['phpunit']);
+
+const METRICS_CACHE_TTL_SECONDS = 60; // 1 min
 
 type DetectedLanguages = {
   js: boolean;
@@ -118,7 +121,7 @@ async function loadCachedContext(
   }
 }
 
-export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
+async function computeRepoMetrics(repoId: string): Promise<RepoMetrics> {
   const repo = await getTrackedRepository(repoId);
 
   const latestScan = await pool.query<{
@@ -201,7 +204,6 @@ export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
     perToolStats.set(row.tool_name, entry);
   }
 
-  // Languages from cached context, or inferred from tool detections
   const ctx = await loadCachedContext(scan.id);
   let languages: DetectedLanguages;
   if (ctx) {
@@ -249,13 +251,7 @@ export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
     };
   });
 
-  // Denominator: user's tracked + enabled tools
   const trackedTools = tools.filter((t) => t.tracked);
-
-  // Numeric edge case: if user hasn't curated anything yet and no backfill
-  // has happened (e.g. no scan has ever run for this repo), fall back to
-  // "everything detected and relevant" so the endpoint doesn't silently
-  // return 0 on a fresh repo.
   const scoringSet =
     trackedTools.length > 0
       ? trackedTools
@@ -289,4 +285,34 @@ export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
     toolsDetected: detectedInSet.length,
     tools,
   };
+}
+
+export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
+  // Cache key includes the latest completed scan id so a new scan
+  // automatically busts the cache.
+  const latest = await pool.query<{ id: string }>(
+    `SELECT id FROM scans
+     WHERE repo_id = $1 AND status = 'complete'
+     ORDER BY completed_at DESC
+     LIMIT 1`,
+    [repoId],
+  );
+  const scanId = latest.rows[0]?.id;
+
+  if (scanId) {
+    const key = cacheKeys.metrics(repoId, scanId);
+    const cached = await cacheGet<RepoMetrics>(key);
+    if (cached) return cached;
+
+    const metrics = await computeRepoMetrics(repoId);
+    try {
+      await cacheSet(key, metrics, METRICS_CACHE_TTL_SECONDS);
+    } catch {
+      /* cache write failures are non-fatal */
+    }
+    return metrics;
+  }
+
+  // No completed scan — compute directly (cheap, mostly empty response)
+  return computeRepoMetrics(repoId);
 }

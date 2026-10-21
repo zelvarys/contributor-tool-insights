@@ -13,8 +13,8 @@ export async function postScan(req: Request, res: Response, next: NextFunction) 
     const repoId = req.params.id;
     if (!repoId) throw badRequest('Repository id is required');
 
-    const scan = await requestScan(repoId, userId);
-    res.status(202).json({ scan });
+    const { scan, cached } = await requestScan(repoId, userId);
+    res.status(cached ? 200 : 202).json({ scan, cached });
   } catch (err) {
     next(err);
   }
