@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
-import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
+import { attachRequestId, errorHandler, notFoundHandler } from './middleware/error.middleware.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { repositoryRoutes } from './modules/repositories/repository.routes.js';
 import { scanRoutes } from './modules/scans/scan.routes.js';
@@ -16,6 +16,7 @@ export function createApp(): Express {
   const app = express();
 
   app.disable('x-powered-by');
+  app.use(attachRequestId);
   app.use(helmet());
   app.use(
     cors({
