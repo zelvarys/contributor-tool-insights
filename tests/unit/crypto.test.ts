@@ -8,7 +8,7 @@ describe('crypto', () => {
     if (!process.env.TOKEN_ENCRYPTION_KEY || process.env.TOKEN_ENCRYPTION_KEY.length !== 64) {
       process.env.TOKEN_ENCRYPTION_KEY = 'a'.repeat(64);
     }
-    const mod = await import('../../src/utils/crypto.js');
+    const mod = await import('../../server/utils/crypto.js');
     encryptToken = mod.encryptToken;
     decryptToken = mod.decryptToken;
   });

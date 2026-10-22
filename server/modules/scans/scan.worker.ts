@@ -23,8 +23,8 @@ import { backfillTrackedToolsFromScan } from '../tracked-tools/tracked-tools.ser
 import {
   cacheCompletedScan,
   invalidateScanCache,
-  type ScanRow,
 } from './scan.service.js';
+import type { ScanSummary } from '../../../shared/types/api.js';
 
 const MAX_COMMIT_DETAIL_LOOKUPS = 30;
 const MAX_CONTRIBUTORS_PAGES = 2;
@@ -202,13 +202,19 @@ function detectLanguagesFromContext(ctx: ScanContext): {
   const hasConfig = (...paths: string[]) => paths.some((p) => configs.has(p));
 
   return {
-    js: hasConfig('package.json') || hasExt('.js') || hasExt('.jsx') ||
-        hasExt('.ts') || hasExt('.tsx') || hasExt('.mjs') || hasExt('.cjs'),
-    python: hasConfig('pyproject.toml','setup.py','setup.cfg',
-                      'requirements.txt','pytest.ini','tox.ini') || hasExt('.py'),
-    go: hasConfig('go.mod','go.sum') || hasExt('.go'),
-    php: hasConfig('composer.json','composer.lock','phpunit.xml',
-                   'phpunit.xml.dist') || hasExt('.php'),
+    js:
+      hasConfig('package.json') ||
+      hasExt('.js') || hasExt('.jsx') || hasExt('.ts') ||
+      hasExt('.tsx') || hasExt('.mjs') || hasExt('.cjs'),
+    python:
+      hasConfig('pyproject.toml', 'setup.py', 'setup.cfg',
+               'requirements.txt', 'pytest.ini', 'tox.ini') ||
+      hasExt('.py'),
+    go: hasConfig('go.mod', 'go.sum') || hasExt('.go'),
+    php:
+      hasConfig('composer.json', 'composer.lock',
+               'phpunit.xml', 'phpunit.xml.dist') ||
+      hasExt('.php'),
   };
 }
 
@@ -292,9 +298,9 @@ async function processScanJob(job: { data: ScanJobData }): Promise<void> {
 
     const row = completed.rows[0];
     if (row) {
-      const scanRow: ScanRow = {
-        id: row.id, repoId: row.repo_id, status: row.status,
-        startedAt: row.started_at?.toISOString() ?? null,
+      const scanRow: ScanSummary = {
+        id: row.id, repoId: row.repo_id,
+        status: row.status, startedAt: row.started_at?.toISOString() ?? null,
         completedAt: row.completed_at?.toISOString() ?? null,
         error: row.error, summary: row.summary,
         createdAt: row.created_at.toISOString(),
@@ -344,11 +350,6 @@ export function startWorker(): Worker<ScanJobData> {
   return worker;
 }
 
-/**
- * Test-only entrypoint: runs a single scan synchronously without BullMQ.
- * Not exported from any other module. Integration tests import this to
- * keep the pipeline deterministic.
- */
 export async function processScanJobForTests(job: { data: ScanJobData }): Promise<void> {
   await processScanJob(job);
 }

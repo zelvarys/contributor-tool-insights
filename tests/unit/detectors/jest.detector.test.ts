@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { jestDetector } from '../../../src/modules/tools/detectors/jest.detector.js';
+import { jestDetector } from '../../../server/modules/tools/detectors/jest.detector.js';
 import { buildScanContext, buildCommit } from '../../helpers/context.js';
 
 describe('jestDetector', () => {

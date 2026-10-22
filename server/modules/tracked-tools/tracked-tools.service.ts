@@ -2,25 +2,11 @@ import { pool } from '../../config/database.js';
 import { getTrackedRepository } from '../repositories/repository.service.js';
 import { badRequest } from '../../utils/errors.js';
 import { detectors } from '../tools/detector.registry.js';
+import type { TrackedToolRow } from '../../../shared/types/api.js';
 
-export type TrackedToolRow = {
-  toolName: string;
-  enabled: boolean;
-  detected: boolean;
-  relevant: boolean;
-  category: string;
-};
-
-/**
- * Returns all 13 registry tools for the repo, joined with the user's
- * current tracking state. Rows that don't yet exist in tracked_tools
- * are returned with `enabled = false` (they'll be backfilled by the
- * scan worker when detected + relevant).
- */
 export async function listTrackedTools(repoId: string): Promise<TrackedToolRow[]> {
-  await getTrackedRepository(repoId); // 404 if missing
+  await getTrackedRepository(repoId);
 
-  // Latest completed scan for detection data
   const latestScan = await pool.query<{ id: string }>(
     `SELECT id FROM scans
      WHERE repo_id = $1 AND status = 'complete'
@@ -30,7 +16,6 @@ export async function listTrackedTools(repoId: string): Promise<TrackedToolRow[]
   );
   const scanId = latestScan.rows[0]?.id;
 
-  // Detected set + categories from tool_usage
   const detectedMap = new Map<string, { detected: boolean; category: string }>();
   if (scanId) {
     const detectionRows = await pool.query<{
@@ -51,7 +36,6 @@ export async function listTrackedTools(repoId: string): Promise<TrackedToolRow[]
     }
   }
 
-  // Current tracked set
   const trackedRows = await pool.query<{
     tool_name: string;
     enabled: boolean;
@@ -62,14 +46,9 @@ export async function listTrackedTools(repoId: string): Promise<TrackedToolRow[]
   const trackedMap = new Map<string, boolean>();
   for (const r of trackedRows.rows) trackedMap.set(r.tool_name, r.enabled);
 
-  // Compose response: one row per registry tool
   return detectors.map((detector) => {
     const detectedInfo = detectedMap.get(detector.name);
     const enabled = trackedMap.get(detector.name) ?? false;
-    // `relevant` is derived by metrics.service based on languages; here
-    // we only need the boolean for the UI's dim/hide decision. For now
-    // treat as relevant if detected — metrics still owns the authoritative
-    // relevant flag.
     return {
       toolName: detector.name,
       enabled,
@@ -84,16 +63,11 @@ export type UpdateTrackedToolsInput = {
   tools: Array<{ name: string; enabled: boolean }>;
 };
 
-/**
- * Upserts the full set: any tool mentioned gets created/updated, any
- * tool not mentioned is deleted. This is a "replace" operation to keep
- * the UI simple — the client always sends the complete desired set.
- */
 export async function replaceTrackedTools(
   repoId: string,
   input: UpdateTrackedToolsInput,
 ): Promise<TrackedToolRow[]> {
-  await getTrackedRepository(repoId); // 404 if missing
+  await getTrackedRepository(repoId);
 
   const knownNames = new Set(detectors.map((d) => d.name));
   const cleaned: Array<{ name: string; enabled: boolean }> = [];
@@ -120,7 +94,6 @@ export async function replaceTrackedTools(
   try {
     await client.query('BEGIN');
 
-    // Delete tools not in the request
     const keepNames = cleaned.map((t) => t.name);
     if (keepNames.length > 0) {
       await client.query(
@@ -132,7 +105,6 @@ export async function replaceTrackedTools(
       await client.query('DELETE FROM tracked_tools WHERE repo_id = $1', [repoId]);
     }
 
-    // Upsert each
     for (const t of cleaned) {
       await client.query(
         `INSERT INTO tracked_tools (repo_id, tool_name, enabled)
@@ -155,16 +127,6 @@ export async function replaceTrackedTools(
   return listTrackedTools(repoId);
 }
 
-/**
- * Called by the scan worker after persisting tool_usage rows.
- * For every detected-and-relevant tool that isn't yet in tracked_tools,
- * insert it with enabled = true. Existing rows are left untouched —
- * the user's explicit choices always win.
- *
- * Language relevance detection is duplicated here (small, self-contained)
- * rather than imported from metrics.service to keep the worker's import
- * graph free of metrics concerns.
- */
 export async function backfillTrackedToolsFromScan(
   repoId: string,
   toolUsage: Array<{ toolName: string; detected: boolean; category: string }>,

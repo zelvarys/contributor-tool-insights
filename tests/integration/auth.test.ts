@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
-import { createApp } from '../../src/app.js';
-import { closeDb } from '../../src/config/database.js';
-import { closeRedis } from '../../src/config/redis.js';
+import { createApp } from '../../server/app.js';
+import { closeDb } from '../../server/config/database.js';
+import { closeRedis } from '../../server/config/redis.js';
 import { truncateAll, insertUser } from '../helpers/db.js';
-import { signJwt, parseExpiresIn } from '../../src/utils/jwt.js';
-import { env } from '../../src/config/env.js';
+import { signJwt, parseExpiresIn } from '../../server/utils/jwt.js';
+import { env } from '../../server/config/env.js';
 
 let app: Express;
 

@@ -10,7 +10,7 @@ describe('jwt', () => {
     if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
       process.env.JWT_SECRET = 'x'.repeat(64);
     }
-    const mod = await import('../../src/utils/jwt.js');
+    const mod = await import('../../server/utils/jwt.js');
     signJwt = mod.signJwt;
     verifyJwt = mod.verifyJwt;
     parseExpiresIn = mod.parseExpiresIn;

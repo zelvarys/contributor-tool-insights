@@ -1,35 +1,12 @@
 import { pool } from '../../config/database.js';
 import { getTrackedRepository } from '../repositories/repository.service.js';
 import { cacheGet, cacheSet, cacheKeys } from '../../utils/cache.js';
-
-export type ToolMetric = {
-  name: string;
-  category: string;
-  detected: boolean;
-  relevant: boolean;
-  tracked: boolean;
-  adoptionRate: number;
-  contributorCount: number;
-  contributorsUsing: number;
-  countsTowardScore: boolean;
-  evidence: Record<string, unknown> | null;
-};
-
-export type RepoMetrics = {
-  repoId: string;
-  repoFullName: string;
-  scanId: string | null;
-  scanCompletedAt: string | null;
-  adoptionScore: number;
-  coverage: number;
-  adoption: number;
-  languages: string[];
-  toolsChecked: number;
-  toolsRelevant: number;
-  toolsTracked: number;
-  toolsDetected: number;
-  tools: ToolMetric[];
-};
+import { logger } from '../../utils/logger.js';
+import type {
+  ToolMetric,
+  RepoMetrics,
+  ToolCategory,
+} from '../../../shared/types/api.js';
 
 const COMMIT_PRESENCE_TOOLS = new Set([
   'github-actions',
@@ -42,7 +19,7 @@ const PYTHON_TOOLS = new Set(['pytest', 'black', 'ruff']);
 const GO_TOOLS = new Set(['go-test', 'golangci-lint']);
 const PHP_TOOLS = new Set(['phpunit']);
 
-const METRICS_CACHE_TTL_SECONDS = 60; // 1 min
+const METRICS_CACHE_TTL_SECONDS = 60;
 
 type DetectedLanguages = {
   js: boolean;
@@ -239,7 +216,7 @@ async function computeRepoMetrics(repoId: string): Promise<RepoMetrics> {
     const tracked = trackedMap.get(row.tool_name) ?? false;
     return {
       name: row.tool_name,
-      category: row.category,
+      category: row.category as ToolCategory,
       detected: row.detected,
       relevant: isToolRelevant(row.tool_name, languages),
       tracked,
@@ -288,8 +265,6 @@ async function computeRepoMetrics(repoId: string): Promise<RepoMetrics> {
 }
 
 export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
-  // Cache key includes the latest completed scan id so a new scan
-  // automatically busts the cache.
   const latest = await pool.query<{ id: string }>(
     `SELECT id FROM scans
      WHERE repo_id = $1 AND status = 'complete'
@@ -307,12 +282,11 @@ export async function getRepoMetrics(repoId: string): Promise<RepoMetrics> {
     const metrics = await computeRepoMetrics(repoId);
     try {
       await cacheSet(key, metrics, METRICS_CACHE_TTL_SECONDS);
-    } catch {
-      /* cache write failures are non-fatal */
+    } catch (err) {
+      logger.warn(`metrics cache write failed: ${(err as Error).message}`);
     }
     return metrics;
   }
 
-  // No completed scan — compute directly (cheap, mostly empty response)
   return computeRepoMetrics(repoId);
 }
