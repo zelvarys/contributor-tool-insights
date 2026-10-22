@@ -17,11 +17,11 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: cti
+          POSTGRES_DB: repo_tool_insights
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d cti"
+          --health-cmd "pg_isready -U postgres -d repo_tool_insights"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -38,7 +38,7 @@ jobs:
 
     env:
       NODE_ENV: test
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/cti
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/repo_tool_insights
       REDIS_URL: redis://localhost:6379
       GITHUB_CLIENT_ID: ci-placeholder
       GITHUB_CLIENT_SECRET: ci-placeholder

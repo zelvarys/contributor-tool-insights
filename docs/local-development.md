@@ -15,7 +15,7 @@ docker compose up -d
 This starts Postgres (`localhost:5432`) and Redis (`localhost:6379`) with health checks. `.env` should use:
 
 ```bash
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/cti
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/repo_tool_insights
 REDIS_URL=redis://localhost:6379
 ```
 
@@ -27,7 +27,7 @@ REDIS_URL=redis://localhost:6379
 sudo apt install postgresql redis-server
 
 sudo -u postgres psql -c "CREATE USER you WITH PASSWORD 'dev';"
-sudo -u postgres createdb -O you cti
+sudo -u postgres createdb -O you repo_tool_insights
 
 sudo systemctl enable --now postgresql
 sudo systemctl enable --now redis-server
@@ -36,7 +36,7 @@ sudo systemctl enable --now redis-server
 `.env`:
 
 ```bash
-DATABASE_URL=postgres://you:dev@localhost:5432/cti
+DATABASE_URL=postgres://you:dev@localhost:5432/repo_tool_insights
 REDIS_URL=redis://localhost:6379
 ```
 
@@ -47,13 +47,13 @@ brew install postgresql@15 redis
 brew services start postgresql@15
 brew services start redis
 
-createdb cti
+createdb repo_tool_insights
 ```
 
 `.env`:
 
 ```bash
-DATABASE_URL=postgres://$(whoami)@localhost:5432/cti
+DATABASE_URL=postgres://user@localhost:5432/repo_tool_insights
 REDIS_URL=redis://localhost:6379
 ```
 
@@ -66,14 +66,14 @@ mkdir -p $PREFIX/var/lib/postgresql
 initdb $PREFIX/var/lib/postgresql
 
 pg_ctl -D $PREFIX/var/lib/postgresql -l $PREFIX/var/lib/postgresql/logfile start
-createdb cti
+createdb repo_tool_insights
 redis-server --daemonize yes
 ```
 
 `.env`:
 
 ```bash
-DATABASE_URL=postgres://$(whoami)@localhost:5432/cti
+DATABASE_URL=postgres://user@localhost:5432/repo_tool_insights
 REDIS_URL=redis://localhost:6379
 ```
 
