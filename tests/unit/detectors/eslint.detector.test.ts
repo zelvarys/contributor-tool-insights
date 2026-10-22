@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { eslintDetector } from '../../../src/modules/tools/detectors/eslint.detector.js';
+import { eslintDetector } from '../../../server/modules/tools/detectors/eslint.detector.js';
 import { buildScanContext, buildCommit } from '../../helpers/context.js';
 
 describe('eslintDetector', () => {

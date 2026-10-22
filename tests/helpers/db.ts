@@ -1,4 +1,4 @@
-import { pool } from '../../src/config/database.js';
+import { pool } from '../../server/config/database.js';
 
 export async function truncateAll(): Promise<void> {
   await pool.query(

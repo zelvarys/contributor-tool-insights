@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
-import { createApp } from '../../src/app.js';
-import { pool, closeDb } from '../../src/config/database.js';
-import { closeRedis } from '../../src/config/redis.js';
+import { createApp } from '../../server/app.js';
+import { pool, closeDb } from '../../server/config/database.js';
+import { closeRedis } from '../../server/config/redis.js';
 import { truncateAll, insertUser, insertRepository } from '../helpers/db.js';
-import { signJwt, parseExpiresIn } from '../../src/utils/jwt.js';
-import { env } from '../../src/config/env.js';
-import { encryptToken } from '../../src/utils/crypto.js';
-import { processScanJobForTests } from '../../src/modules/scans/scan.worker.js';
+import { signJwt, parseExpiresIn } from '../../server/utils/jwt.js';
+import { env } from '../../server/config/env.js';
+import { encryptToken } from '../../server/utils/crypto.js';
+import { processScanJobForTests } from '../../server/modules/scans/scan.worker.js';
 
 let app: Express;
 let token: string;

@@ -5,13 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { Client } from 'pg';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = join(__dirname, '..', 'src', 'db', 'migrations');
+const migrationsDir = join(__dirname, '..', 'server', 'db', 'migrations');
 
 async function main() {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
 
-  // Ledger table
   await client.query(`
     CREATE TABLE IF NOT EXISTS migrations (
       name TEXT PRIMARY KEY,

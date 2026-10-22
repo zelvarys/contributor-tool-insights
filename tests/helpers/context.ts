@@ -1,4 +1,4 @@
-import type { ScanContext, CommitInfo } from '../../src/modules/scans/scan.context.js';
+import type { ScanContext, CommitInfo } from '../../server/modules/scans/scan.context.js';
 
 export type ContextOptions = {
   scanId?: string;

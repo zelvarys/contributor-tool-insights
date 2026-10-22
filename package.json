@@ -3,19 +3,21 @@
   "version": "0.1.0",
   "description": "Analytics platform that measures whether contributors actually use the tools a project adopts.",
   "type": "module",
-  "main": "dist/server.js",
+  "main": "server/dist/server.js",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "worker": "tsx watch src/modules/scans/scan.worker.ts",
+    "dev": "tsx watch server/server.ts",
+    "worker": "tsx watch server/modules/scans/scan.worker.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "build:frontend": "echo 'Frontend build not yet wired — see src/'",
+    "start": "node server/dist/server.js",
     "migrate": "node scripts/migrate.js",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\"",
+    "typecheck:frontend": "echo 'Frontend typecheck not yet wired — see tsconfig.frontend.json'",
+    "lint": "eslint server --ext .ts",
+    "format": "prettier --write \"server/**/*.ts\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage"

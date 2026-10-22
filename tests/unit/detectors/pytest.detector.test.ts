@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pytestDetector } from '../../../src/modules/tools/detectors/pytest.detector.js';
+import { pytestDetector } from '../../../server/modules/tools/detectors/pytest.detector.js';
 import { buildScanContext, buildCommit } from '../../helpers/context.js';
 
 describe('pytestDetector', () => {
