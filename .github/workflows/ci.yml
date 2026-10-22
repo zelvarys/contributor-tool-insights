@@ -43,9 +43,9 @@ jobs:
       GITHUB_CLIENT_ID: ci-placeholder
       GITHUB_CLIENT_SECRET: ci-placeholder
       GITHUB_CALLBACK_URL: http://localhost:3000/auth/github/callback
-      JWT_SECRET: ci-placeholder-secret-must-be-at-least-32-chars-long
+      JWT_SECRET: ci-placeholder-jwt-secret-at-least-32-chars-long
       JWT_EXPIRES_IN: 7d
-      TOKEN_ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      TOKEN_ENCRYPTION_KEY: cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe
       FRONTEND_URL: http://localhost:5173
 
     steps:
