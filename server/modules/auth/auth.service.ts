@@ -7,14 +7,7 @@ import {
   getPrimaryEmail,
 } from '../../integrations/github/github.client.js';
 import { logger } from '../../utils/logger.js';
-
-export type AuthUser = {
-  id: string;
-  githubId: number;
-  username: string;
-  email: string | null;
-  avatarUrl: string | null;
-};
+import type { AuthUser } from '../../../shared/types/api.js';
 
 export async function handleGithubCallback(accessToken: string): Promise<string> {
   const ghUser = await getAuthenticatedUser(accessToken);
@@ -79,7 +72,6 @@ export async function getAccessTokenForUser(userId: string): Promise<string | nu
   try {
     return decryptToken(row.access_token);
   } catch {
-    // Corrupt or truncated ciphertext — treat as no token
     logger.warn(`Token decrypt failed for user ${userId} — treating as missing`);
     return null;
   }

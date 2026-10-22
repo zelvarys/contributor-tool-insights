@@ -7,20 +7,7 @@ import {
   type GitHubRepo,
 } from '../../integrations/github/github.client.js';
 import { AppError, badRequest, notFound } from '../../utils/errors.js';
-
-export type TrackedRepository = {
-  id: string;
-  githubId: number;
-  owner: string;
-  name: string;
-  fullName: string;
-  isPrivate: boolean;
-  defaultBranch: string;
-  stars: number;
-  forks: number;
-  contributorCount: number;
-  createdAt: string;
-};
+import type { TrackedRepository } from '../../../shared/types/api.js';
 
 function toTracked(row: {
   id: string;

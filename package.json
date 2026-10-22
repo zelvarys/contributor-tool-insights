@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Analytics platform that measures whether contributors actually use the tools a project adopts.",
   "type": "module",
-  "main": "server/dist/server.js",
+  "main": "dist/server/server.js",
   "engines": {
     "node": ">=20"
   },
@@ -12,7 +12,7 @@
     "worker": "tsx watch server/modules/scans/scan.worker.ts",
     "build": "tsc",
     "build:frontend": "echo 'Frontend build not yet wired — see src/'",
-    "start": "node server/dist/server.js",
+    "start": "node dist/server/server.js",
     "migrate": "node scripts/migrate.js",
     "typecheck": "tsc --noEmit",
     "typecheck:frontend": "echo 'Frontend typecheck not yet wired — see tsconfig.frontend.json'",

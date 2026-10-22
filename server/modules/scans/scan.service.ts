@@ -1,19 +1,8 @@
 import { pool } from '../../config/database.js';
 import { scanQueue, type ScanJobData } from './scan.queue.js';
 import { getTrackedRepository } from '../repositories/repository.service.js';
-import { AppError } from '../../utils/errors.js';
-import { cacheGet, cacheSet, cacheKeys } from '../../utils/cache.js';
-
-export type ScanRow = {
-  id: string;
-  repoId: string;
-  status: 'pending' | 'running' | 'complete' | 'failed';
-  startedAt: string | null;
-  completedAt: string | null;
-  error: string | null;
-  summary: Record<string, unknown> | null;
-  createdAt: string;
-};
+import { cacheGet, cacheSet, cacheDel, cacheKeys } from '../../utils/cache.js';
+import type { ScanSummary, ScanStatus } from '../../../shared/types/api.js';
 
 function toScan(row: {
   id: string;
@@ -24,11 +13,11 @@ function toScan(row: {
   error: string | null;
   summary: unknown;
   created_at: Date;
-}): ScanRow {
+}): ScanSummary {
   return {
     id: row.id,
     repoId: row.repo_id,
-    status: row.status as ScanRow['status'],
+    status: row.status as ScanStatus,
     startedAt: row.started_at?.toISOString() ?? null,
     completedAt: row.completed_at?.toISOString() ?? null,
     error: row.error,
@@ -37,37 +26,21 @@ function toScan(row: {
   };
 }
 
-const FRESH_SCAN_TTL_SECONDS = 60 * 60; // 1 hour
-
-/**
- * Returns the cached scan if it's still fresh, else null.
- * "Fresh" means: completed less than 1 hour ago.
- */
-async function getCachedScanResult(
-  repoId: string,
-): Promise<{ scan: ScanRow; cached: true } | null> {
-  const cached = await cacheGet<{ scan: ScanRow; writtenAt: number }>(
-    cacheKeys.scanResult(repoId),
-  );
-  if (!cached) return null;
-  return { scan: cached.scan, cached: true };
-}
+const FRESH_SCAN_TTL_SECONDS = 60 * 60;
 
 export async function requestScan(
   repoId: string,
   userId: string,
-): Promise<{ scan: ScanRow; cached: boolean }> {
-  await getTrackedRepository(repoId); // 404 if missing
+): Promise<{ scan: ScanSummary; cached: boolean }> {
+  await getTrackedRepository(repoId);
 
-  // Cache short-circuit: return the last completed scan if fresh.
-  const cached = await getCachedScanResult(repoId);
+  const cached = await cacheGet<{ scan: ScanSummary; writtenAt: number }>(
+    cacheKeys.scanResult(repoId),
+  );
   if (cached) {
     return { scan: cached.scan, cached: true };
   }
 
-  // Prevent double-queueing by taking a short lock.
-  // If a scan is already pending/running for this repo within the last
-  // 5 minutes, return that one instead of queueing another.
   const existing = await pool.query(
     `SELECT id, repo_id, status, started_at, completed_at, error,
             summary, created_at
@@ -101,11 +74,7 @@ export async function requestScan(
   return { scan, cached: false };
 }
 
-/**
- * Called by the worker when a scan completes successfully.
- * Writes the scan result to the cache with a 1h TTL.
- */
-export async function cacheCompletedScan(scan: ScanRow): Promise<void> {
+export async function cacheCompletedScan(scan: ScanSummary): Promise<void> {
   await cacheSet(
     cacheKeys.scanResult(scan.repoId),
     { scan, writtenAt: Date.now() },
@@ -113,17 +82,11 @@ export async function cacheCompletedScan(scan: ScanRow): Promise<void> {
   );
 }
 
-/**
- * Called by the worker when a scan fails — clear any stale cache so
- * the next request re-queues instead of returning bad data.
- */
 export async function invalidateScanCache(repoId: string): Promise<void> {
-  await import('../../utils/cache.js').then((m) =>
-    m.cacheDel(cacheKeys.scanResult(repoId)),
-  );
+  await cacheDel(cacheKeys.scanResult(repoId));
 }
 
-export async function listScansForRepo(repoId: string): Promise<ScanRow[]> {
+export async function listScansForRepo(repoId: string): Promise<ScanSummary[]> {
   const { rows } = await pool.query(
     `SELECT id, repo_id, status, started_at, completed_at, error,
             summary, created_at
@@ -136,7 +99,7 @@ export async function listScansForRepo(repoId: string): Promise<ScanRow[]> {
   return rows.map(toScan);
 }
 
-export async function getScan(scanId: string): Promise<ScanRow | null> {
+export async function getScan(scanId: string): Promise<ScanSummary | null> {
   const { rows } = await pool.query(
     `SELECT id, repo_id, status, started_at, completed_at, error,
             summary, created_at

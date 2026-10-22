@@ -4,8 +4,8 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2022"],
-    "rootDir": "./server",
-    "outDir": "./server/dist",
+    "rootDir": ".",
+    "outDir": "./dist",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -17,6 +17,6 @@
     "sourceMap": true,
     "declaration": false
   },
-  "include": ["server/**/*"],
-  "exclude": ["node_modules", "server/dist", "tests", "src", "scripts"]
+  "include": ["server/**/*", "shared/**/*"],
+  "exclude": ["node_modules", "dist", "tests", "src", "scripts"]
 }
