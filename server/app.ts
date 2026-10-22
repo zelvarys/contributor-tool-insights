@@ -35,7 +35,7 @@ export function createApp(): Express {
   app.get('/health', (_req, res) => {
     res.json({
       status: 'ok',
-      service: 'contributor-tool-insights',
+      service: 'repo-tool-insights',
       time: new Date().toISOString(),
     });
   });

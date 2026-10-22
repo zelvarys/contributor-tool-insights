@@ -1,5 +1,5 @@
 {
-  "name": "contributor-tool-insights",
+  "name": "repo-tool-insights",
   "version": "0.1.0",
   "description": "Analytics platform that measures whether contributors actually use the tools a project adopts.",
   "type": "module",

@@ -2,7 +2,7 @@
 
 ## Overview
 
-`contributor-tool-insights` is a two-process backend: an Express HTTP API and a BullMQ scan worker. Both connect to the same Postgres database and Redis instance. A future frontend (Vite app in `src/`) will call the API over HTTP.
+`repo-tool-insights` is a two-process backend: an Express HTTP API and a BullMQ scan worker. Both connect to the same Postgres database and Redis instance. A future frontend (Vite app in `src/`) will call the API over HTTP.
 
 ```
 ┌─────────────┐        HTTP        ┌─────────────────┐

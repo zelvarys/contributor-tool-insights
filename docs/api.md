@@ -32,7 +32,7 @@ Rate-limited responses also include `Retry-After` and `X-RateLimit-*` headers.
 No auth, no rate limit.
 
 ```json
-{ "status": "ok", "service": "contributor-tool-insights", "time": "2026-01-01T00:00:00.000Z" }
+{ "status": "ok", "service": "repo-tool-insights", "time": "2026-01-01T00:00:00.000Z" }
 ```
 
 ## Auth

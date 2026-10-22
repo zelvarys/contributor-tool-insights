@@ -1,4 +1,4 @@
-## contributor-tool-insights
+## repo-tool-insights
 
 An analytics platform for open-source maintainers and engineering teams that answers a question they've never had data for:
 
