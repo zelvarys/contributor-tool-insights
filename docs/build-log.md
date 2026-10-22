@@ -1,6 +1,6 @@
 # Build Log
 
-Phase-by-phase history of how `repo-tool-insights` was built. Each phase was a self-contained, testable milestone with its own acceptance test. Kept as engineering documentation for future contributors.
+Phase-by-phase history of how `repo-insights` was built. Each phase was a self-contained, testable milestone with its own acceptance test. Kept as engineering documentation for future contributors.
 
 ---
 

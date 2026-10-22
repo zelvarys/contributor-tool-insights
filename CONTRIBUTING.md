@@ -1,4 +1,4 @@
-# Contributing to repo-tool-insights
+# Contributing to repo-insights
 
 Thanks for taking the time to contribute.
 

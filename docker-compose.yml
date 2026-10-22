@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: rti-postgres
+    container_name: repo-insights-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -19,7 +19,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: rti-redis
+    container_name: repo-insights-redis
     restart: unless-stopped
     ports:
       - "6379:6379"

@@ -1,4 +1,4 @@
-## repo-tool-insights
+# repo-insights
 
 An analytics platform for open-source maintainers and engineering teams that answers a question they've never had data for:
 
@@ -6,7 +6,7 @@ An analytics platform for open-source maintainers and engineering teams that ans
 
 Connect a GitHub repository and get clear, per-tool adoption metrics — who's using ESLint, who's writing tests, who's bypassing CI — instead of guessing.
 
-### Status
+## Status
 
 Backend MVP complete (Phases 0–10). Frontend in progress.
 
@@ -20,17 +20,18 @@ Backend MVP complete (Phases 0–10). Frontend in progress.
 - [ ] Frontend dashboard
 - [ ] Benchmarking, Slack, API access
 
-### Repository layout
+## Repository layout
 
 ```
 server/     Backend — Express API + BullMQ worker
 src/        Frontend — Vite app (in progress)
+shared/     TypeScript types shared between server and frontend (API contract)
 tests/      Vitest unit + integration tests
 scripts/    Migration runner and dev utilities
 docs/       Architecture, API reference, detector details, build log
 ```
 
-### Quickstart
+## Quickstart
 
 ```bash
 npm install
@@ -42,7 +43,7 @@ npm run worker          # in a separate terminal — BullMQ scan worker
 
 See [`docs/local-development.md`](docs/local-development.md) for Postgres/Redis setup (native or Docker).
 
-### Documentation
+## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) — system overview
 - [`docs/detectors.md`](docs/detectors.md) — the 13 tools we detect and how
@@ -50,6 +51,6 @@ See [`docs/local-development.md`](docs/local-development.md) for Postgres/Redis 
 - [`docs/build-log.md`](docs/build-log.md) — phase-by-phase build history
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to contribute
 
-### License
+## License
 
 MIT — see [`LICENSE`](LICENSE).
