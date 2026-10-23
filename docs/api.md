@@ -69,6 +69,10 @@ No auth required. Clears the `token` cookie if present.
 { "ok": true }
 ```
 
+> **Tenancy:** this API is a single shared workspace. All authenticated
+> users see the same tracked repositories and their scans/metrics. See
+> `docs/architecture.md#tenancy-model`.
+
 ## Repositories
 
 ### `GET /repos/github`
