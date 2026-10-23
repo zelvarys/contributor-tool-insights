@@ -22,6 +22,8 @@ afterAll(async () => {
   await truncateAll();
   await closeDb();
   await closeRedis();
+  const { scanQueue } = await import('../../server/modules/scans/scan.queue.js');
+  await scanQueue.close();
 });
 
 describe('auth', () => {
