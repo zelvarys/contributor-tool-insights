@@ -6,7 +6,6 @@ import { buildAuthorizeUrl, exchangeCodeForToken } from '../../integrations/gith
 import { handleGithubCallback, getUserById } from './auth.service.js';
 import { badRequest, unauthorized } from '../../utils/errors.js';
 import { parseExpiresIn } from '../../utils/jwt.js';
-import { logger } from '../../utils/logger.js';
 
 const STATE_TTL_SECONDS = 600; // 10 minutes
 
@@ -64,10 +63,4 @@ export async function getMe(req: Request, res: Response, next: NextFunction) {
 export async function logout(_req: Request, res: Response) {
   res.clearCookie('token', { path: '/' });
   res.json({ ok: true });
-}
-
-// Small helper for debugging — remove before production
-export async function logCallbackQuery(req: Request, _res: Response, next: NextFunction) {
-  logger.debug(`OAuth callback query: ${JSON.stringify(req.query)}`);
-  next();
 }
