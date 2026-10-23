@@ -69,6 +69,38 @@ Redis is not a source of truth — everything cached here can be regenerated fro
 3. Protected routes → `requireAuth` middleware → read `token` cookie → verify HMAC (timing-safe) → attach `req.userId`
 4. Every protected handler resolves the GitHub token via `getAccessTokenForUser(req.userId)` which decrypts at rest; decrypt failures are treated as "no token available" (worker fails the scan cleanly, user must re-authenticate)
 
+## Tenancy model
+
+repo-insights is deployed as a **single shared workspace**. All authenticated
+users see the same set of tracked repositories, scans, and metrics.
+
+`repositories.added_by` records who added the repo — it is informational,
+not an ownership model. It does not gate access.
+
+This model is correct for:
+
+- A self-hosted deployment used by one team
+- A shared demo instance
+- Early-stage SaaS before team features exist
+
+It is **not** correct for:
+
+- Multi-tenant SaaS where different customers share a deployment
+- Any workflow where "who can see this repo" matters
+
+If multi-tenancy becomes a requirement, the upgrade path is:
+
+1. Add `organizations` and `org_members` tables
+2. Add `repositories.org_id`
+3. Backfill every repo to a default org
+4. Add `WHERE org_id IN (SELECT org_id FROM org_members WHERE user_id = $1)`
+   to every repo/scan/metric/tracked-tools query
+5. Write tests proving user A cannot access user B's org's repos
+
+Until then, do not add per-user filtering. Doing so without a team model
+creates the worst of both worlds: users lose access to shared data, and
+there is still no way to share.
+
 ## Scoring
 
 `adoptionScore = coverage × adoption`, both 0–100:

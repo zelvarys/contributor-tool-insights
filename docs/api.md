@@ -39,11 +39,11 @@ No auth, no rate limit.
 
 ### `GET /auth/github`
 
-Redirects to GitHub's authorize URL. Sets a `state` value in Redis (10m TTL) for CSRF protection.
+Redirects to GitHub's authorize URL. Sets a `state` value in Redis (10m TTL) and an `oauth_state` httpOnly cookie for CSRF protection.
 
 ### `GET /auth/github/callback?code=…&state=…`
 
-Exchanges the OAuth code, upserts the user, sets the JWT cookie, redirects to `FRONTEND_URL`. `state` is one-time-use — replay returns `400 BAD_REQUEST`.
+Exchanges the OAuth code, upserts the user, sets the JWT cookie, redirects to `FRONTEND_URL`. `state` is validated twice: it must match the `oauth_state` httpOnly cookie set by `GET /auth/github`, and it must still exist in Redis. A cookie mismatch, missing state, or replayed state returns `400 BAD_REQUEST`.
 
 ### `GET /auth/me`
 
@@ -63,11 +63,15 @@ Requires auth.
 
 ### `POST /auth/logout`
 
-Requires auth. Clears the cookie.
+No auth required. Clears the `token` cookie if present.
 
 ```json
 { "ok": true }
 ```
+
+> **Tenancy:** this API is a single shared workspace. All authenticated
+> users see the same tracked repositories and their scans/metrics. See
+> `docs/architecture.md#tenancy-model`.
 
 ## Repositories
 

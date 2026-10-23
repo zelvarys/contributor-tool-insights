@@ -28,7 +28,7 @@ export function createApp(): Express {
   app.use(cookieParser());
 
   app.use((req, _res, next) => {
-    logger.debug(`${req.method} ${req.url}`);
+    logger.debug(`${req.method} ${req.path}`);
     next();
   });
 
