@@ -47,11 +47,13 @@ export function rateLimit(opts: RateLimitOptions) {
           (windowBucket + 1) * opts.windowSeconds -
           Math.floor(Date.now() / 1000);
         res.setHeader('Retry-After', String(Math.max(1, retryAfter)));
+        const requestId = (req as Request & { requestId?: string }).requestId;
         res.status(429).json({
           error: {
             code: 'RATE_LIMITED',
             message: 'Too many requests — slow down and try again shortly',
             retryAfterSeconds: Math.max(1, retryAfter),
+            requestId,
           },
         });
         return;
