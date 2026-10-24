@@ -150,3 +150,28 @@ npm run test:cov
 ```
 
 Tests use the same Postgres and Redis as development. Each test truncates the DB before running. Do not point tests at a production database.
+
+## Frontend
+
+The frontend lives in `src/` and runs as a Vite app.
+
+```bash
+npm install             # one install at root covers backend + frontend
+npm run dev:frontend    # http://localhost:5173
+```
+
+The Vite dev server proxies `/auth`, `/repos`, `/scans`, and `/health` to
+the backend on `:3000`. Start the backend (`npm run dev`) in another
+terminal.
+
+Frontend scripts:
+
+- `npm run dev:frontend` — Vite dev server
+- `npm run build:frontend` — production build into `src/dist/`
+- `npm run typecheck:frontend` — TypeScript check
+
+shadcn components live in `src/src/components/ui/`. Add a new one with:
+
+```bash
+cd src && npx shadcn@latest add <component>
+```

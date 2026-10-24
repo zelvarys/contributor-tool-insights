@@ -39,6 +39,7 @@ cp .env.example .env    # fill in DATABASE_URL, REDIS_URL, GitHub OAuth keys, JW
 npm run migrate
 npm run dev             # API on http://localhost:3000
 npm run worker          # in a separate terminal — BullMQ scan worker
+npm run dev:frontend    # frontend on http://localhost:5173
 ```
 
 See [`docs/local-development.md`](docs/local-development.md) for Postgres/Redis setup (native or Docker).

@@ -10,3 +10,7 @@ coverage/
 .DS_Store
 .vscode/
 .idea/
+src/node_modules/
+src/.env.local
+src/.env.*.local
+src/*.tsbuildinfo

@@ -113,3 +113,11 @@ Files: `vitest.config.ts`, `tests/**/*.test.ts`, `tests/helpers/*`; extended `er
 ## Monorepo refactor 
 
 `src/` moved to `server/`. Frontend directory `src/` created and waiting for Vite. Docs moved into `docs/`. CI workflow added.
+
+---
+
+## Frontend F0 — Scaffold ✅
+
+Vite 6 + React 18 + TypeScript + Tailwind v4 + shadcn/ui (Neutral).
+`src/` is a workspace. Vite proxy forwards `/auth`, `/repos`, `/scans`,
+`/health` to `:3000`. Aliases: `@/*` → `src/src`, `@shared/*` → `shared`.
